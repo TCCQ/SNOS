@@ -13,8 +13,8 @@
 * buses (at least the general one)
 * host interaction (input, video)
 * internal hardware skeleton (minus timing)
-..* just let the CPU write to relevant ram, doesn't need to do much right now
-..* a sort of 'acknowledge and do nothing' state
+   * just let the CPU write to relevant ram, doesn't need to do much right now
+   * a sort of 'acknowledge and do nothing' state
 * internal hardware (video)
 * SNES-side external hardware skeleton
 * internal hardware revamp (timing, sound)
