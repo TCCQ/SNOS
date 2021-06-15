@@ -22,5 +22,9 @@
 * Cartridge-side external hardware (functionality)
 * whatever else I am forgetting
 
+## In Progress
+* ROM file loading
+* opt-codes
+
 ## What's been done
 * nothing 
