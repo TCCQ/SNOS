@@ -4,13 +4,12 @@
  * This is a header file for opt-codes and other internal cpu operations 
  */
 
-//         DOUBLE CHECK !!!! I believe the 65c816 is BIG-ENDIAN 
-//         This seems to be true as far as I can tell
+//        SNES is LITTLE ENDIAN 
+
 //TODO emulated/8-bit/non-native mode
 //     will require either a check each time each optcode is processed, or two versions of most opt codes
 //     not sure where to put this as a priority
 
-//TODO figure out what is going on with B/C registers. Strong connection to emulation mode I think
 //looks like C is another name for A when in 16b mode
 //B is the name of the upper byte of A when in 8b mode. It is not destroyed, and XBA can swap them
 //upper parts of X,Y are wiped when 8b mode starts 
@@ -53,22 +52,68 @@ BYTE DB;
 
 //TODO confim that these point to the right place/ mirror changes properly 
 //not sure if this works 
-//assumes big endian
 
-BYTE & AH = &(A);
-BYTE & AL = &(A+1);  
-BYTE & XH = &(X);
-BYTE & XL = &(X+1);  
-BYTE & YH = &(Y);
-BYTE & YL = &(Y+1);  
-BYTE & DH = &(D);
-BYTE & DL = &(D+1);  
-BYTE & PCH = &(PC);
-BYTE & PCL = &(PC+1);  
-BYTE & SH = &(S);
-BYTE & SL = &(S+1);  
+BYTE & AL = &(A);
+BYTE & AH = &(A+1);  
+BYTE & XL = &(X);
+BYTE & XH = &(X+1);  
+BYTE & YL = &(Y);
+BYTE & YH = &(Y+1);  
+BYTE & DL = &(D);
+BYTE & DH = &(D+1);  
+BYTE & PCL = &(PC);
+BYTE & PCH = &(PC+1);  
+BYTE & SL = &(S);
+BYTE & SH = &(S+1);  
 
-//TODO define signals 
+//40 pins, stolen from https://apprize.best/programming/65816/65816.files/image496.jpg
+//not sure if some of these are useful
+//TODO double check that these are right
+
+unsigned char signals[5]; 
+
+//singals start at 1 to be consistant with documentation, are at position #-1
+/* SIGNALS: (in order)
+ * 1 VP     vector pull. low when accessing an interupt vector 
+ * 2 RDY    LOW: no instructions are executed. started by WAI instruction. return to high by /RES /ABORT /NMI /IRQ. starts running on next clock low
+ * 3 ABORT  no internal reg. changes during instruction, interupt, stores ptr to aborted instruction as stack return addr
+ * 4 IRQ    interupt request, needs to be manually cleared (ack'ed). see processor flag 
+ * 5 ML     memory lock. for use with multprocessor, basically "idle one bus cycle"
+ * 6 NMI    non-maskable interupt. high-to-low triggers interupt after current instruction. does not need to be munually reset.
+ * 7 VPA    valid program address. 
+ * 8 Vdd    positve voltage supply 
+ * 9-20 A0-A11  address bus, first 12 bits
+ * 21 Vss   ground 
+ * 22-25 A12-A15  address bus next 4 bits
+ * 26-33 D7/BA7-D0/BA0 (backwards order)  address bus bank during first half of cycle, data bus during second half
+ * 34 R/W   high = reading, low = writing. may be set to high by BE
+ * 35 E     mirror emulation processor flag 
+ * 36 BE    enable the use of the address/data bus
+ * 37 CLK   clock. held high during standby
+ * 38 M/X   mirrors M and X processor status bits. M is valid during clock HIGH 
+ * 39 VDA   valid data address. 
+ * 40 RES   initialize and start. must be held low for 2 cycles after Vdd is established. ignore /RDY when held low. [see initialization]. on high, reset interupt 
+ */
+
+/* INITIALIZATION
+ * D  = 0x0000
+ * DB = 0X00
+ * PB = 0X00
+ * SH = 0X01
+ * XH = 0X00
+ * YH = 0X00
+ * P = 0bxx1101xx  (x=not initializated) E = 1
+ *
+ * INIT SIGNALS 
+ * E = 1
+ * M/X = 1
+ * R/W = 1
+ * SYNC = 0
+ * VDA = 0
+ * VP = 1
+ * VPA = 0
+ */
+
 
 /*
  * 24 ways of adressing memory 
@@ -102,6 +147,19 @@ ADDRESS[2] blockSourceBankDestinationBank (BYTE, BYTE); //xyc
 /*
  * end of addressing mode declarations  
  */
+
+
+/* MEMORY 
+ * [bank][16b addr]
+ * maybe don't need to reserve all of it? it will almost always be mirrored down by at least 1/2
+ * this way, can mirror by memory[0x00] = memory[0x80]
+ * two pointers to same location, efficient mirroring 
+ *
+ * covers entire addressable area. see memory map. 
+ * TODO investigate hiROM/loROM 
+ */
+BYTE memory[0xFF][0xFFFF]; 
+
 
 
 //the plan is for each instruction to have its own function (with an address as an argument for most of them)
