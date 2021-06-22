@@ -31,7 +31,7 @@ typedef unsigned long int ADDRESS; //top byte must be 0x00
  * DB (data bank)
  * D (direct, offset for direct addressing)
  * X,Y
- * P (processor status)
+ * P (processor status)     E (extra bit stored, can flip with carry bit)
  * PB (Program bank)
  * PC (Program counter)
  * S (stack pointer)
@@ -47,24 +47,25 @@ WORD PC;
 WORD S;
 
 BYTE P;
+BYTE E;
 BYTE PB;
 BYTE DB;
 
 //TODO confim that these point to the right place/ mirror changes properly 
 //not sure if this works 
 
-BYTE & AL = &(A);
-BYTE & AH = &(A+1);  
-BYTE & XL = &(X);
-BYTE & XH = &(X+1);  
-BYTE & YL = &(Y);
-BYTE & YH = &(Y+1);  
-BYTE & DL = &(D);
-BYTE & DH = &(D+1);  
-BYTE & PCL = &(PC);
-BYTE & PCH = &(PC+1);  
-BYTE & SL = &(S);
-BYTE & SH = &(S+1);  
+BYTE* AL = &(A);
+BYTE* AH = &(A+1);  
+BYTE* XL = &(X);
+BYTE* XH = &(X+1);  
+BYTE* YL = &(Y);
+BYTE* YH = &(Y+1);  
+BYTE* DL = &(D);
+BYTE* DH = &(D+1);  
+BYTE* PCL = &(PC);
+BYTE* PCH = &(PC+1);  
+BYTE* SL = &(S);
+BYTE* SH = &(S+1);  
 
 //40 pins, stolen from https://apprize.best/programming/65816/65816.files/image496.jpg
 //not sure if some of these are useful
@@ -150,15 +151,13 @@ ADDRESS[2] blockSourceBankDestinationBank (BYTE, BYTE); //xyc
 
 
 /* MEMORY 
- * [bank][16b addr]
+ * [24b addr]
  * maybe don't need to reserve all of it? it will almost always be mirrored down by at least 1/2
- * this way, can mirror by memory[0x00] = memory[0x80]
- * two pointers to same location, efficient mirroring 
  *
  * covers entire addressable area. see memory map. 
  * TODO investigate hiROM/loROM 
  */
-BYTE memory[0xFF][0xFFFF]; 
+BYTE memory[0xFFFFFF]; 
 
 
 
@@ -188,19 +187,19 @@ void BRK (ADDRESS); //Force Break                         !!!!!!!!! not sure if 
 void BRL (ADDRESS); //Branch Always Long
 void BVC (ADDRESS); //Branch on Overflow Clear (Pv = 0)
 void BVS (ADDRESS); //Branch on Overflow Set (Pv = 1)
-void CLC (void); //Clear Carry Flag                       !!! implied, not sure if I need a address func
+void CLC (void); //Clear Carry Flag                       
 void CLD (void); //Clear Decimal Mode
 void CLI (void); //Clear Interrupt Disable Bit
 void CLV (void); //Clear Overflow Flag
 void CMP (ADDRESS); //Compare Memory and Accumulator
-void COP (); //Coprocessor                                !!!! takes a constant. return to
+void COP (ADDRESS); //Coprocessor                                
 void CPX (ADDRESS); //Compare Memory and Index X
 void CPY (ADDRESS); //Compare Memory and Index Y
-void DEC (ADDRESS); //Decrement Memory or Accumulator by One  !!!! unclear if uses A address or accum.-- maybe seperate versions?
-void DEX (void); //Decrement Index X by One               !!!! implied
+void DEC (ADDRESS); //Decrement Memory or Accumulator by One  
+void DEX (void); //Decrement Index X by One               
 void DEY (void); //Decrement Index Y by One
 void EOR (ADDRESS); //Exclusive "OR" Memory with Accumulator 
-void INC (ADDRESS); //Increment Memory or Accumulator by One     !!!! see DEC
+void INC (ADDRESS); //Increment Memory or Accumulator by One     
 void INX (void); //Increment Index X by One
 void INY (void); //Increment Index Y by One
 void JML (ADDRESS); //Jump Long
@@ -209,8 +208,8 @@ void JSL (ADDRESS); //Jump Subroutine Long
 void JSR (ADDRESS); //Jump to New Location Saving Return Address
 void LDA (ADDRESS); //Load Accumulator with Memory
 void LDX (ADDRESS); //Load Index X with Memory
-void LDY (ADDRESS); //Load Index Y with Memory                  !!!! think about how to handle immediate addresses (constants)
-void LSR (ADDRESS); //Shift One Bit Right (Memory or Accumulator) !!! more accumulator troubles
+void LDY (ADDRESS); //Load Index Y with Memory                  
+void LSR (ADDRESS); //Shift One Bit Right (Memory or Accumulator) 
 void MVN (ADDRESS[2]); //Block Move Negative              !!! see xyc, block address
 void MVP (ADDRESS[2]); //Block Move Positive
 void NOP (void); //No Operation                          
@@ -231,17 +230,17 @@ void PLD (void); //Pull Direct Register from Stack
 void PLP (void); //Pull Processor Status from Stack
 void PLX (void); //Pull Index X from Stack
 void PLY (void); //Pull Index Y form Stack
-void REP (); //Reset Status Bits                         !!!!immediate (constant)
-void ROL (ADDRESS); //Rotate One Bit Left (Memory or Accumulator)     !!!accumulator trouble
+void REP (ADDRESS); //Reset Status Bits                         
+void ROL (ADDRESS); //Rotate One Bit Left (Memory or Accumulator)     
 void ROR (ADDRESS); //Rotate One Bit Right (Memory or Accumulator)
-void RTI (); //Return from Interrupt                     !!!! use stack address I guess. return to
-void RTL (); //Return from Subroutine Long
-void RTS (); //Return from Subroutine
+void RTI (void); //Return from Interrupt                     
+void RTL (void); //Return from Subroutine Long
+void RTS (void); //Return from Subroutine
 void SBC (ADDRESS); //Subtract Memory from Accumulator with Borrow
 void SEC (void); //Set Carry Flag                        
 void SED (void); //Set Decimal Mode
 void SEI (void); //Set Interrupt Disable Status
-void SEP (); //Set Processor Status Bits              !!!!! immediate (constant)
+void SEP (ADDRESS); //Set Processor Status Bits              
 void STA (ADDRESS); //Store Accumulator in Memory
 void STP (void); //Stop the Clock
 void STX (ADDRESS); //Store Index X in Memory
@@ -263,7 +262,7 @@ void TYA (void); //Transfer Index Y to Accumulator
 void TYX (void); //Transfer Index Y to Index X
 void WAI (void); //Wait for Interrupt
 void XBA (void); //Exchange AH and AL
-void XCE (void); //Exchange Carry and Emulation Bits     !!!! B register and C register. looks like C = A | B << 8. find out more 
+void XCE (void); //Exchange Carry and Emulation Bits      
 
 //TODO double check number of arguments to optcodes (can do when writing implimentation 
 // # arguments decided by addressing mode
