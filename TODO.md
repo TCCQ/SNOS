@@ -24,7 +24,8 @@
 
 ## In Progress
 * ROM file loading
-* opt-codes
+* opt-codes/instructions 
+* ram
 
 ## What's been done
-* nothing 
+* addressing styles  

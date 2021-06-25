@@ -22,7 +22,7 @@ static inline BYTE getX() {
  * This seems ineffiecient, but I can't see any way around it
  */
 
-//confirm whether this happens before or after PC gets incremented. 
+//TODO !!!!! fix this. at the moment PC points to the *NEXT* instruction, this is meaningless 
 ADDRESS immediate (void) {//# 
   return (((ADDRESS)PB << 16) | PC) + 1;
 }
@@ -71,7 +71,7 @@ ADDRESS absoluteLongIndexedWithX (BYTE i, BYTE j, BYTE k) { //al,x
   return ((((ADDRESS)k) << 16) | (j << 8) | i) + ((getX())? (X & 0xFF):(X));
 }
 
-//confirm off by one error. PC inc happens BEFORE this 
+//PC inc happens BEFORE this 
 ADDRESS programCounterRelative (BYTE i) { //r
   return (ADDRESS)(PC + ((signed)i)); //cast later to avoid changing 0x00FF0000 byte 
 }
@@ -105,7 +105,7 @@ ADDRESS absoluteIndexedIndirect (BYTE i, BYTE j) { //(a,x)
 //TODO check stack conventions for SNES 
 ADDRESS stackRelative (BYTE i) { //d,s
   return (((ADDRESS)S) + i) & 0xFFFF; 
-  //i is unsigned, can only reference things above the stack. Which direction does the SNES stack grow?
+  //i is unsigned, can only reference things above the stack ptr. 
 }
 
 //TODO confirm deref? 

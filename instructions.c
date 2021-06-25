@@ -12,13 +12,119 @@
 //reference for P flag register 
 //N V M X/B D I Z C E 
 
+//utility functions 
+
+static inline BYTE getN() {
+  return (P & 0x80) >> 7;
+}
+
+static inline void setN(BYTE i) {
+  P &= ~0x80;
+  P |= (i << 7);
+}
+
+static inline BYTE getV() {
+  return (P & 0x40) >> 6; 
+}
+
+static inline void setV (BYTE i) {
+  P &= ~0x40;
+  P |= (i << 6);
+}
+
+static inline BYTE getM() {
+  return (P & 0x20) >> 5;
+}
+
+static inline BYTE setM (BYTE i) {
+  P &= ~0x20;
+  P |= (i << 5);
+}
+
+static inline BYTE getX() {
+  return (P & 0x10) >> 4;
+}
+
+static inline void setX (BYTE i) {
+  P &= ~0x10;
+  P |= (i << 4);
+}
+
+static inline BYTE getD() {
+  return (P & 0x80) >> 3;
+}
+
+static inline void setD (BYTE i) {
+  P &= ~0x08;
+  P |= (i << 3);
+}
+
+static inline BYTE getI() {
+  return (P & 0x04) >> 2;
+}
+
+static inline void getI (BYTE i) {
+  P &= ~0x04;
+  P |= (i << 2);
+}
+
+static inline BYTE getZ() {
+  return (P & 0x02) >> 1;
+}
+
+static inline void setZ (BYTE i) {
+  P &= ~0x02;
+  P |= (i << 1);
+}
+
+static inline BYTE getC() {
+  return P & 0x01;
+}
+
+static inline void setC() {
+  P &= ~0x01;
+  P |= (i);
+}
+
+static inline WORD* tow (ADDRESS i) {
+  return (WORD*)(memory + i); 
+}
+
+
+//ignoring emulation mode for now 
+void pushByte (BYTE i) {
+  memory[S] = i;
+  S -= 1;
+}
+
+BYTE popByte () {
+  return memory[++S];
+}
+
+void pushWord (WORD i) {
+  memory[S-1] = i & 0xFF;
+  memory[S] = (i & 0xFF00) >> 8; 
+  S -= 2;
+}
+
+WORD popWord() {
+  WORD out = 0;
+  out |= memory[--S];
+  out |= ((WORD)memory[--S]) << 8;
+  return out;
+}
 
 /*
  * NOTE ABOUT IMMEDIATE ADDRESSING
  * some instructions take either an addressed memory location or a constant,
  * so even constants will be passed as an address 
- * TODO wait is immediate already an offset from PC? am I using these terms wrong? That seems likely 
- * I am just gonna use the word "constant" cause it doesn't have ambiguity 
+ * They can be relative to PC
+ */
+
+/* NOTE ABOUT THE PROGRAM COUNTER 
+ * the program counter points to the NEXT instruction,
+ * so barring a jump, PC in incremented BEFORE the current optcode is executed 
+ * a jump is just setting the PC/PB accordingly.
  */
 
 /* 
@@ -28,17 +134,13 @@
  *  hardcoded in the optcode function 
  */
 
-//utility func 
-inline WORD* tow (ADDRESS i) {
-  return (WORD*)(memory + i); 
-}
 
 //TODO 8b/16b switches for registers 
 //TODO 8b/16b constants 
 
 //TODO add cycle counts. (maybe do on optcode and not on instruction?)
 
-//TODO set flags 
+//TODO set flags (use util functions) 
 
 void ADC (ADDRESS i) { //Add Memory to Accumulator with Carry
   WORD* m = tow(i);
@@ -55,52 +157,75 @@ void ASL (ADDRESS i) { //Shift One Bit Left, Memory or Accumulator
   *ptr = (*ptr) << 1; //right kind of shift? 
 }
 
+/* NOTE ABOUT BRANCHES
+ * branch instructions **CANNOT** move across banks 
+ * changes ONLY PC, and not PB
+ * code can be in any bank, but must be moved to with a full jump.
+ */
 void BCC (ADDRESS i) { //Branch on Carry Clear (Pe = O)
-  
+  if (!getC()) {
+    PC = i & 0xFFFF; 
+  }
 }
 
 void BCS (ADDRESS i) { //Branch on Carry Set (Pe = 1)
-
+  if (getC()) {
+    PC = i & 0xFFFF; 
+  }
 }
 
 void BEQ (ADDRESS i) { //Branch if Equal (Pz = 1)
-
+  if (getZ()) {
+    PC = i & 0xFFFF; 
+  }
 }
 
 void BIT (ADDRESS i) { //Bit Test
-
+  //return to when doing flags 
 }
 
 void BMI (ADDRESS i) { //Branch if Result Minus (PN = 1)
-
+  if (getN()) {
+    PC = i & 0xFFFF;
+  }
 }
 
 void BNE (ADDRESS i) { //Branch if Not Equal (Pz = 0)
-
+  if (!getZ()) {
+    PC = i & 0xFFFF;
+  }
 }
 
 void BPL (ADDRESS i) { //Branch if Result Plus (PN = 0)
-
+  if (!getN()) {
+    PC = i & 0xFFFF;
+  }
 }
 
+//basically just an in-bank jump 
 void BRA (ADDRESS i) { //Branch Always
-
+  PC = i & 0xFFFF 
 }
 
 void BRK (ADDRESS i) { //Force Break                         !!!!!!!!! not sure if this takes an address or not
   //TODO find the correct vector to jump to 
 }
 
+//confirm that this does not change PB 
 void BRL (ADDRESS i) { //Branch Always Long
-
+  PC = i & 0xFFFF;
 }
 
 void BVC (ADDRESS i) { //Branch on Overflow Clear (Pv = 0)
-
+  if (!getV()) {
+    PC = i & 0xFFFF;
+  }
 }
 
 void BVS (ADDRESS i) { //Branch on Overflow Set (Pv = 1)
-
+  if (getV()) {
+    PC = i & 0xFFFF;
+  }
 }
 
 void CLC (void) { //Clear Carry Flag                       
@@ -166,7 +291,7 @@ void INY (void) { //Increment Index Y by One
   Y++;
 }
 
-//TODO check this for off by one error. depends on WHEN PC gets incremented. 
+//TODO check which of these change PB and which don't 
 void JML (ADDRESS i) { //Jump Long
   PC = i; 
 }
@@ -175,13 +300,14 @@ void JMP (ADDRESS i) { //Jump to New Location
   PC = i;
 }
 
-//TODO check stack format 
 void JSL (ADDRESS i) { //Jump Subroutine Long
-  //save address on the stack 
+  pushWord(PC);
+  PC = i;
 }
 
 void JSR (ADDRESS i) { //Jump to New Location Saving Return Address
-  //same as above 
+  pushWord(PC);
+  PC = i;
 }
 
 void LDA (ADDRESS i) { //Load Accumulator with Memory
@@ -225,69 +351,97 @@ void ORA (ADDRESS i) { //"OR" Memory with Accumulator
   A |= *(tow(i));
 }
 
-//TODO stack stuff 
+//push 16b constant 
 void PEA (ADDRESS i) { //Push Effective Absolute Address on Stack (or Push Immediate Data on Stack)
-  
+  pushByte(((WORD)memory[i+1]) << 8 | memory[i]);
 }
 
+//same as above, deref'd memory, (this one not an in code constant)
 void PEI (ADDRESS i) { //Push Effective Indirect Address on Stack (add one cycle if DL f 0)
-
+  pushByte(((WORD)memory[i+1]) << 8 | memory[i]);
 }
 
+//again, similar to the first one, addr relative to PC
+//TODO make sure I can use an addr. style for this. 
 void PER (ADDRESS i) { //Push Effective Program Counter Relative Address on Stack
-
+  pushByte(((WORD)memory[i+1]) << 8 | memory[i]);
 }
 
+//these use size switches, confirm that that is intended.
 void PHA (void) { //Push Accumulator on Stack
-
+  if (getM()) {
+    pushByte(*AL);
+  } else {
+    pushWord(A);
+  }
 }
 
 void PHB (void) { //Push Data Bank Register on Stack
-
+  pushByte(DB);
 }
 
 void PHD (void) { //Push Direct Register on Stack
-
+  pushByte(D);
 }
 
 void PHK (void) { //Push Program Bank Register on Stack
-
+  pushByte(PB);
 }
 
 void PHP (void) { //Push Processor Status on Stack
-
+  pushByte(P);
 }
 
 void PHX (void) { //Push Index X on Stack
-
+  if (getX()) {
+    pushByte(*XL);
+  } else {
+    pushWord(X);
+  }
 }
 
 void PHY (void) { //Push index Y on Stack
-
+  if (getX()) {
+    pushByte(*YL);
+  } else {
+    pushWord(Y);
+  }
 }
 
 void PLA (void) { //Pull Accumulator from Stack
-
+  if (getM()) {
+    *AL = popByte();
+  } else {
+    A = popWord();
+  }
 }
 
 void PLB (void) { //Pull Data Bank Register from Stack
-
+  DB = popByte();
 }
 
 void PLD (void) { //Pull Direct Register from Stack
-
+  D = popByte();
 }
 
 void PLP (void) { //Pull Processor Status from Stack
-
+  P = popByte();
 }
 
-void PLX (void) { //Pull Index X from Stack
-
+void PLX (vo id) { //Pull Index X from Stack
+  if (getX()) {
+    *XL = popByte();
+  } else {
+    X = popWord();
+  }
 }
 
 void PLY (void) { //Pull Index Y form Stack
-
+  if (getX()) {
+    *YL = popByte();
+  } else {
+    Y = popWord();
+  }
 }
 
 void REP (ADDRESS i) { //Reset Status Bits                         
@@ -306,24 +460,29 @@ void ROR (ADDRESS i) { //Rotate One Bit Right (Memory or Accumulator)
   *ptr |= (P & 0x01); //carry flag 
 }
 
-//uses stack return addr I think 
+//next three, caller convention is push PC before jmp
+//so to return, just pop PC
+//not sure if rtl and rts are different? 
 void RTI (void) { //Return from Interrupt                     
-
+  PC = popWord();
 }
 
 void RTL (void) { //Return from Subroutine Long
-
+  PC = popWord();
 }
 
 void RTS (void) { //Return from Subroutine
-
+  PC = popWord();
 }
 
-//constants? ??? return to. 
-//need both a immediate and address mode 
-//  solve with # addr function. 
+//!!!! constant scales with A
+//so if M =0, it's two bytes 
 void SBC (ADDRESS i) { //Subtract Memory from Accumulator with Borrow
-  
+  if (getM()) {
+    *AL = *AL - memory[i] - (getC())? 0:1;
+  } else {
+    A = A - (((WORD)memory[i+1]) << 8 | memory[i]) - (getC())? 0:1; 
+  }
 }
 
 void SEC (void) { //Set Carry Flag                        
@@ -339,12 +498,16 @@ void SEI (void) { //Set Interrupt Disable Status
 }
 
 //takes constant 
+//opposite of clear P bits I think?
 void SEP (ADDRESS i) { //Set Processor Status Bits              
-  
+  P |= memory[i];
 }
 
 void STA (ADDRESS i) { //Store Accumulator in Memory
-  *(tow(i)) = A;
+  memory[i] = *AL;
+  if (!getM()) {
+    memory[i+1] = *AH;
+  }
 }
 
 //TODO clock interaction 
@@ -353,15 +516,21 @@ void STP (void) { //Stop the Clock
 }
 
 void STX (ADDRESS i) { //Store Index X in Memory
-  *(tow(i)) = x;
+  memory[i] = *XL;
+  if (!getX()) {
+    memory[i+1] = *XH;
+  }
 }
 
 void STY (ADDRESS i) { //Store Index Y in Memory
-  *(tow(i)) = Y;
+  memory[i] = *YL;
+  if (!getX()) {
+    memory[i+1] = *YH;
+  }
 }
 
 void STZ (ADDRESS i) { //Store Zero in Memory
-  *(tow(i)) = 0;
+  memory[i] = 0;
 }
 
 void TAX (void) { //Transfer Accumulator to Index X
