@@ -86,45 +86,34 @@ static inline void setC() {
   P |= (i);
 }
 
-static inline WORD* tow (ADDRESS i) {
-  return (WORD*)(memory + i); 
-}
-
 
 //ignoring emulation mode for now 
 void pushByte (BYTE i) {
-  memory[S] = i;
+  memory[map[S]] = i;
   S -= 1;
 }
 
 BYTE popByte () {
-  return memory[++S];
+  return memory[map[++S]];
 }
 
 void pushWord (WORD i) {
-  memory[S-1] = i & 0xFF;
-  memory[S] = (i & 0xFF00) >> 8; 
+  memory[map[S-1]] = i & 0xFF;
+  memory[map[S]] = (i & 0xFF00) >> 8; 
   S -= 2;
 }
 
 WORD popWord() {
   WORD out = 0;
-  out |= memory[--S];
-  out |= ((WORD)memory[--S]) << 8;
+  out |= memory[map[--S]];
+  out |= ((WORD)memory[map[--S]]) << 8;
   return out;
 }
 
 /*
  * NOTE ABOUT IMMEDIATE ADDRESSING
  * some instructions take either an addressed memory location or a constant,
- * so even constants will be passed as an address 
- * They can be relative to PC
- */
-
-/* NOTE ABOUT THE PROGRAM COUNTER 
- * the program counter points to the NEXT instruction,
- * so barring a jump, PC in incremented BEFORE the current optcode is executed 
- * a jump is just setting the PC/PB accordingly.
+ * I will be handling the constant variations on the optcode level, just do the memory versions here 
  */
 
 /* 
@@ -134,27 +123,43 @@ WORD popWord() {
  *  hardcoded in the optcode function 
  */
 
+/* NOTE ABOUT THE PROGRAM COUNTER 
+ * the program counter points to the NEXT instruction,
+ * so barring a jump, PC in incremented BEFORE the current optcode is executed 
+ * a jump is just setting the PC/PB accordingly.
+ */
 
-//TODO 8b/16b switches for registers 
-//TODO 8b/16b constants 
+
+//TODO software side interupts, remember to push PB and then PC 
 
 //TODO add cycle counts. (maybe do on optcode and not on instruction?)
 
 //TODO set flags (use util functions) 
 
 void ADC (ADDRESS i) { //Add Memory to Accumulator with Carry
-  WORD* m = tow(i);
-  A = A + *m + 1;
+  if (getM()) {
+    A += memory[map[i]] + (getC())? 1:0;
+  } else {
+    A += (((WORD)memory[map[i+1]]) << 8 | memory[map[i]]) + (getC())? 1:0;
+  }
 }
 
 void AND (ADDRESS i) { //"AND" Memory with Accumulator
-  A &= *(tow(i));
+  *AL &= memory[map[i]];
+  *AH &= ~(getM()-1) | memory[map[i+1]]; //top byte if M = 0
 }
 
-//for things that are mem or accu, I am just gonna write the accu side in the optcode, and do memory here. 
+//do memory only 
+//size of shifted area depends on M flag 
 void ASL (ADDRESS i) { //Shift One Bit Left, Memory or Accumulator
-  WORD* ptr = tow(i);
-  *ptr = (*ptr) << 1; //right kind of shift? 
+  if (getM()) {
+    memory[map[i]] = memory[map[i]] >> 1;
+  } else {
+    WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
+    o = o >> 1;
+    memory[map[i]] = o & 0xFF;
+    memory[map[i+1]] = (o & 0xFF00) >> 8;
+  }
 }
 
 /* NOTE ABOUT BRANCHES
@@ -180,6 +185,7 @@ void BEQ (ADDRESS i) { //Branch if Equal (Pz = 1)
   }
 }
 
+//TODO 
 void BIT (ADDRESS i) { //Bit Test
   //return to when doing flags 
 }
@@ -207,8 +213,9 @@ void BRA (ADDRESS i) { //Branch Always
   PC = i & 0xFFFF 
 }
 
-void BRK (ADDRESS i) { //Force Break                         !!!!!!!!! not sure if this takes an address or not
-  //TODO find the correct vector to jump to 
+//implied addr 
+void BRK (void) { //Force Break         
+  //vector is $FFE6-$FFE7 in native mode 
 }
 
 //confirm that this does not change PB 
@@ -244,6 +251,7 @@ void CLV (void) { //Clear Overflow Flag
   P &= 0xBF; 
 }
 
+//TODO when doing flags 
 void CMP (ADDRESS i) { //Compare Memory and Accumulator
   //flags 
 }
@@ -260,40 +268,72 @@ void CPY (ADDRESS i) { //Compare Memory and Index Y
   //flags 
 }
 
+//follows M flag 
+//memory only version 
 void DEC (ADDRESS i) { //Decrement Memory or Accumulator by One  
-  WORD* ptr = tow(i);
-  *ptr -= 1;
+  if (getM()) {
+    memory[map[i]]--;
+  } else {
+    WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
+    o--;
+    memory[map[i]] = o & 0xFF;
+    memory[map[i+1]] = (o & 0xFF00) >> 8;
+  }
 }
 
 void DEX (void) { //Decrement Index X by One               
-  X--;
+  if (getX()) {
+    *XL--;
+  } else {
+    X--;
+  }
 }
 
 void DEY (void) { //Decrement Index Y by One
-  Y--;
+  if (getX()) {
+    *YL--;
+  } else {
+    Y--;
+  }
 }
 
 void EOR (ADDRESS i) { //Exclusive "OR" Memory with Accumulator 
-  A ^= *(tow(i));
+  *AL ^= memory[map[i]];
+  if (!getM()) *AH ^= memory[map[i+1]];
 }
 
-//as above, only memory is implimented here 
+//see DEC 
 void INC (ADDRESS i) { //Increment Memory or Accumulator by One     
-  WORD* ptr = tow(i);
-  *ptr += 1;
+  if (getM()) {
+    memory[map[i]]++;
+  } else {
+    WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
+    o++;
+    memory[map[i]] = o & 0xFF;
+    memory[map[i+1]] = (o & 0xFF00) >> 8;
+  }
 }
 
 void INX (void) { //Increment Index X by One
-  X++;
+  if (getX()) {
+    *XL++;
+  } else {
+    X++;
+  }
 }
 
 void INY (void) { //Increment Index Y by One
-  Y++;
+  if (getX()) {
+    *YL++;
+  } else {
+    Y++;
+  }
 }
 
-//TODO check which of these change PB and which don't 
+//"the only instructions that affect the program bank register are: RTI, RTL, JML, JSL, JMP Absolute Long 
 void JML (ADDRESS i) { //Jump Long
   PC = i; 
+  PB = (i & 0xFF0000) >> 16;
 }
 
 void JMP (ADDRESS i) { //Jump to New Location
@@ -301,8 +341,10 @@ void JMP (ADDRESS i) { //Jump to New Location
 }
 
 void JSL (ADDRESS i) { //Jump Subroutine Long
+  pushByte(PB);
   pushWord(PC);
   PC = i;
+  PB = (i & 0xFF0000) >> 16;
 }
 
 void JSR (ADDRESS i) { //Jump to New Location Saving Return Address
@@ -311,35 +353,46 @@ void JSR (ADDRESS i) { //Jump to New Location Saving Return Address
 }
 
 void LDA (ADDRESS i) { //Load Accumulator with Memory
-  A = *(tow(i));
+  *AL = memory[map[i]];
+  if (!getM()) *AH = memory[map[i+1]];
 }
 
 void LDX (ADDRESS i) { //Load Index X with Memory
-  X = *(tow(i));
+  *XL = memory[map[i]];
+  if (!getX()) *XH = memory[map[i+1]];
 }
 
 void LDY (ADDRESS i) { //Load Index Y with Memory                  
-  Y = *(tow(i));
+  *YL = memory[map[i]];
+  if (!getX()) *YH = memory[map[i+1]];
 }
 
+//see ASL 
 void LSR (ADDRESS i) { //Shift One Bit Right (Memory or Accumulator) 
-  WORD* ptr = tow(i);
-  *ptr = (*ptr) >> 1; //right kind of shift? 
+  if (getM()) {
+    memory[map[i]] = memory[map[i]] << 1;
+  } else {
+    WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
+    o = o << 1;
+    memory[map[i]] = o & 0xFF;
+    memory[map[i+1]] = (o & 0xFF00) >> 8;
+  }
 }
 
+//uses full registers, basically must be in native m=0,x=0 mode. 
+//I *think* it's safe not to check P flags for this 
 void MVN (ADDRESS i[2]) { //Block Move Negative              !!! see xyc, block address
-  memcpy(memory + i[1], memory + i[0], A+1);
-  X += A;
-  Y += A;
-  A = 0xFFFF; 
+  while (A-- != 0xFFFF) {
+    memory[map[i[1] | Y++]] = memory[map[i[0] | X++]];
+  }
   //address are bottom of the block area 
 }
 
+//see above 
 void MVP (ADDRESS i[2]) { //Block Move Positive
-  memcpy(memory + i[1] - A+1, memory + i[0] + A+1, A+1);
-  X -= A;
-  Y -= A;
-  A = 0xFFFF;
+  while (A++ != 0xFFFF) {
+    memory[map[i[1] | Y--]] = memory[map[i[0] | X--]];
+  }
   //addresses are the top of the block area 
 }
 
@@ -348,23 +401,24 @@ void NOP (void) { //No Operation
 }
 
 void ORA (ADDRESS i) { //"OR" Memory with Accumulator 
-  A |= *(tow(i));
+  *AL |= memory[map[i]];
+  if (!getM()) *AH |= memory[map[i+1]];
 }
 
+//TODO this is dummy, and will not be called. can be cleaned later 
 //push 16b constant 
 void PEA (ADDRESS i) { //Push Effective Absolute Address on Stack (or Push Immediate Data on Stack)
-  pushByte(((WORD)memory[i+1]) << 8 | memory[i]);
+  pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]);
 }
 
-//same as above, deref'd memory, (this one not an in code constant)
+//deref'd memory, (this one not an in code constant)
 void PEI (ADDRESS i) { //Push Effective Indirect Address on Stack (add one cycle if DL f 0)
-  pushByte(((WORD)memory[i+1]) << 8 | memory[i]);
+  pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]);
 }
 
-//again, similar to the first one, addr relative to PC
-//TODO make sure I can use an addr. style for this. 
+//push address, not deref'd
 void PER (ADDRESS i) { //Push Effective Program Counter Relative Address on Stack
-  pushByte(((WORD)memory[i+1]) << 8 | memory[i]);
+  pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]);
 }
 
 //these use size switches, confirm that that is intended.
@@ -445,43 +499,55 @@ void PLY (void) { //Pull Index Y form Stack
 }
 
 void REP (ADDRESS i) { //Reset Status Bits                         
-  P &= ~(memory[i]); //always 1 byte, even when regs. are 16b
+  P &= ~(memory[map[i]]); //always 1 byte, even when regs. are 16b
 }
 
+//follow M flag for size, rotated bit is carry. 
 void ROL (ADDRESS i) { //Rotate One Bit Left (Memory or Accumulator)     
-  WORD* ptr = tow(i);
-  *ptr = *ptr << 1;
-  *ptr |= (P & 0x01); //carry flag 
+  if (getM()) {
+    memory[map[i]] = ((memory[map[i]] >> 1) & 0x8F ) | (getC() << 7);
+  } else {
+    WORD o = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    o = ((o >> 1) & 0x8F) | (getC() << 7);
+    memory[map[i]] = o & 0xFF;
+    memory[map[i+1]] = (o & 0xFF00) >> 8;
+  }
 }
 
+//see above 
 void ROR (ADDRESS i) { //Rotate One Bit Right (Memory or Accumulator)
-  WORD* ptr = tow(i);
-  *ptr = *ptr >> 1;
-  *ptr |= (P & 0x01); //carry flag 
+  if (getM()) {
+    memory[map[i]] = ((memory[map[i]] << 1) & 0xFE ) | getC();
+  } else {
+    WORD o = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    o = ((o << 1) & 0xFE) | getC();
+    memory[map[i]] = o & 0xFF;
+    memory[map[i+1]] = (o & 0xFF00) >> 8;
+  }
 }
 
 //next three, caller convention is push PC before jmp
 //so to return, just pop PC
-//not sure if rtl and rts are different? 
 void RTI (void) { //Return from Interrupt                     
   PC = popWord();
+  PB = popByte(); //not sure if this should be here? but I think so, see JML 
 }
 
 void RTL (void) { //Return from Subroutine Long
   PC = popWord();
+  PB = popByte(); 
 }
 
 void RTS (void) { //Return from Subroutine
   PC = popWord();
 }
 
-//!!!! constant scales with A
-//so if M =0, it's two bytes 
+//follows M flag 
 void SBC (ADDRESS i) { //Subtract Memory from Accumulator with Borrow
   if (getM()) {
-    *AL = *AL - memory[i] - (getC())? 0:1;
+    *AL = *AL - memory[map[i]] - (getC())? 0:1;
   } else {
-    A = A - (((WORD)memory[i+1]) << 8 | memory[i]) - (getC())? 0:1; 
+    A = A - (((WORD)memory[map[i+1]]) << 8 | memory[map[i]]) - (getC())? 0:1; 
   }
 }
 
@@ -500,13 +566,13 @@ void SEI (void) { //Set Interrupt Disable Status
 //takes constant 
 //opposite of clear P bits I think?
 void SEP (ADDRESS i) { //Set Processor Status Bits              
-  P |= memory[i];
+  P |= memory[map[i]];
 }
 
 void STA (ADDRESS i) { //Store Accumulator in Memory
-  memory[i] = *AL;
+  memory[map[i]] = *AL;
   if (!getM()) {
-    memory[i+1] = *AH;
+    memory[map[i+1]] = *AH;
   }
 }
 
@@ -516,21 +582,21 @@ void STP (void) { //Stop the Clock
 }
 
 void STX (ADDRESS i) { //Store Index X in Memory
-  memory[i] = *XL;
+  memory[map[i]] = *XL;
   if (!getX()) {
-    memory[i+1] = *XH;
+    memory[map[i+1]] = *XH;
   }
 }
 
 void STY (ADDRESS i) { //Store Index Y in Memory
-  memory[i] = *YL;
+  memory[map[i]] = *YL;
   if (!getX()) {
-    memory[i+1] = *YH;
+    memory[map[i+1]] = *YH;
   }
 }
 
 void STZ (ADDRESS i) { //Store Zero in Memory
-  memory[i] = 0;
+  memory[map[i]] = 0;
 }
 
 void TAX (void) { //Transfer Accumulator to Index X
@@ -553,12 +619,14 @@ void TDC (void) { //Transfer Direct Register to Accumulator
   A = D
 }
 
+//TODO 
 //flags I guess? not sure what this does 
+//and memory and A, reset affected bits in memory, set Z  
 void TRB (ADDRESS i) { //Test and Reset Bit
   
 }
 
-//see above 
+//see above, but set bits in memory 
 void TSB (ADDRESS i) { //Test and Set Bit
 
 }

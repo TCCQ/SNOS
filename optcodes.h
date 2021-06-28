@@ -7,12 +7,8 @@
 //        SNES is LITTLE ENDIAN 
 
 //TODO emulated/8-bit/non-native mode
-//     will require either a check each time each optcode is processed, or two versions of most opt codes
-//     not sure where to put this as a priority
+//for now I will be ignoring emulated mode, but will be checking register sizes. 
 
-//looks like C is another name for A when in 16b mode
-//B is the name of the upper byte of A when in 8b mode. It is not destroyed, and XBA can swap them
-//upper parts of X,Y are wiped when 8b mode starts 
 
 #ifndef BYTE 
 typedef unsigned char BYTE;
@@ -36,7 +32,12 @@ typedef unsigned long int ADDRESS; //top byte must be 0x00
  * PC (Program counter)
  * S (stack pointer)
  */
-//in native mode banks are 8 bits and all others are 16 
+//in native mode banks (and P) are 8 bits and all others are 16 
+//flags in the P register can change that 
+
+//looks like C is another name for A when in 16b mode
+//B is the name of the upper byte of A when in 8b mode. It is not destroyed, and XBA can swap them
+//upper parts of X,Y are wiped when 8b mode starts 
 
 WORD A;
 WORD X;
@@ -52,7 +53,6 @@ BYTE PB;
 BYTE DB;
 
 //TODO confim that these point to the right place/ mirror changes properly 
-//not sure if this works 
 
 BYTE* AL = &(A);
 BYTE* AH = &(A+1);  
@@ -118,15 +118,15 @@ unsigned char signals[5];
 
 /*
  * 24 ways of adressing memory 
- * I believe just addresses the 16MB 0x000000-0xFFFFFF builtin ram
  * comment after declaration is the abbreviation for that address mode 
+ * some of these are dummy declarations that will not be called, here for posterity 
  */
-ADDRESS immediate (BYTE, BYTE); //#       !!!! optcode followed by a constant, in code. maybe pass PC + 1 or something?
+ADDRESS immediate (BYTE, BYTE); //#      
 ADDRESS absolute (BYTE, BYTE); //a
 ADDRESS absoluteLong (BYTE, BYTE, BYTE); //al
 ADDRESS direct (BYTE); //d
-ADDRESS accumulator (void); //A         !!!! acts on REGISTER A, not on memory  ||  this and below are mostly placeholers
-ADDRESS implied (void); //i               !!!! not sure if I need a function for this, don't think it would ever get called
+ADDRESS accumulator (void); //A         
+ADDRESS implied (void); //i            
 ADDRESS directIndirectIndexed (BYTE); //(d),y
 ADDRESS directIndirectIndexedLong (BYTE); //[d],y
 ADDRESS directIndexedIndirect (BYTE); //(d,x)
@@ -141,7 +141,7 @@ ADDRESS absoluteIndirect (BYTE, BYTE); //(a)
 ADDRESS directIndirect (BYTE); //(d)
 ADDRESS directIndirectLong (BYTE); //[d]
 ADDRESS absoluteIndexedIndirect (BYTE, BYTE); //(a,x)
-ADDRESS stack (void); //s                  !!!!!not sure, used for push/pull operations
+ADDRESS stack (void); //s             
 ADDRESS stackRelative (BYTE); //d,s
 ADDRESS stackRelativeIndirectIndexed (BYTE); //(d,s),y
 ADDRESS[2] blockSourceBankDestinationBank (BYTE, BYTE); //xyc
@@ -151,26 +151,18 @@ ADDRESS[2] blockSourceBankDestinationBank (BYTE, BYTE); //xyc
 
 
 /* MEMORY 
- * [24b addr]
- * maybe don't need to reserve all of it? it will almost always be mirrored down by at least 1/2
- *
- * covers entire addressable area. see memory map. 
+ * covers whole area, accessed as memory[map[i]] 
+ * map allows mirroring, should be setup at beinging and not changed. 
  * TODO investigate hiROM/loROM 
  */
+ADDRESS map[0xFFFFFF];
 BYTE memory[0xFFFFFF]; 
 
 
 
-//the plan is for each instruction to have its own function (with an address as an argument for most of them)
-//and then have each optcode be a combination of one of the above addressing modes and an instruction function 
-//so like optXX would be some hex opt-code which would be implimented as one of the above address calculators with that result passed to the calculation defined by the instruction 
-//each instruction needs a function (I guess named by their mnemonic) that takes 0-2 addresses as needed 
-//and each optcode needs one function that combines the right addressing style with the right calculation 
-
-//remember to set processor flag bits on relevant instructions. 
 //some instructions have constant versions, or change a register OR a memory location
-//  for said instructions, I am trying to avoid spliting them, but am not sure what to do
-//  maybe pass some out of bounds address? like 0xFF000000 or something, use as an error/special code
+//for those cases, the below declared function will handle the memory version. The constant or register version will be done 
+//in the optcode 
 
 void ADC (ADDRESS); //Add Memory to Accumulator with Carry
 void AND (ADDRESS); //"AND" Memory with Accumulator
@@ -183,7 +175,7 @@ void BMI (ADDRESS); //Branch if Result Minus (PN = 1)
 void BNE (ADDRESS); //Branch if Not Equal (Pz = 0)
 void BPL (ADDRESS); //Branch if Result Plus (PN = 0)
 void BRA (ADDRESS); //Branch Always
-void BRK (ADDRESS); //Force Break                         !!!!!!!!! not sure if this takes an address or not
+void BRK (void); //Force Break        
 void BRL (ADDRESS); //Branch Always Long
 void BVC (ADDRESS); //Branch on Overflow Clear (Pv = 0)
 void BVS (ADDRESS); //Branch on Overflow Set (Pv = 1)

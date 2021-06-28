@@ -23,6 +23,7 @@ static inline BYTE getX() {
  */
 
 //TODO !!!!! fix this. at the moment PC points to the *NEXT* instruction, this is meaningless 
+//this will not be used, as constants will be passed in the optcode. 
 ADDRESS immediate (void) {//# 
   return (((ADDRESS)PB << 16) | PC) + 1;
 }
@@ -81,7 +82,6 @@ ADDRESS programCounterRelativeLong (BYTE i, BYTE j) { //rl
   return (ADDRESS)(PC + (((WORD)j) << 8) + i); //this one is not signed 
 }
 
-//TODO number of bytes deref'd depends on instruction 
 ADDRESS absoluteIndirect (BYTE i, BYTE j) { //(a)
   return  *((ADDRESS*)(&memory[(((ADDRESS)j) << 16 ) | i]) ) & 0xFFFFFF; 
   //deref passed ptr in bank 00, take 24 bits from that location 

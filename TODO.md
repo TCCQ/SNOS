@@ -25,7 +25,7 @@
 ## In Progress
 * ROM file loading
 * opt-codes/instructions 
-* ram
 
 ## What's been done
 * addressing styles  
+* ram (need mirroring according to cart-type)
