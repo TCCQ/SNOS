@@ -11,6 +11,10 @@
 
 //reference for P flag register 
 //N V M X/B D I Z C E 
+//
+//useful links
+//https://wiki.superfamicom.org/65816-reference#asl-left-shifts-accumulator-memory-366
+//https://apprize.best/programming/65816/21.html
 
 //utility functions 
 
@@ -134,31 +138,101 @@ WORD popWord() {
 
 //TODO add cycle counts. (maybe do on optcode and not on instruction?)
 
+//TODO fix which jumps set PB and which don't (branches also)
 //TODO set flags (use util functions) 
+//TODO decimal flag, see below
+
+/* NOTE ABOUT FLAGS AND ARITHMATIC
+ * ok so a few things 
+ * carry is set if bit 7 overflows into what would be bit 8 or underflow from bit 0
+ * zero is easy
+ * overflow flag is similar to carry, but for bit 7 ASSUME THE INPUTS ARE SIGNED, then if there is overflow from bit 6 into 7, set might also need to see if carry is set 
+ * negative is set if bit 7 is set. thats it
+ *
+ * IMPORTANT!!!
+ * decimal is more complicated
+ * if D is set, then use BCD not regular binary. This seems like a collosal pain, so its on the backburner for now
+ *  tentative plan is to just convert to binary, math, then convert back
+ */
 
 void ADC (ADDRESS i) { //Add Memory to Accumulator with Carry
   if (getM()) {
-    A += memory[map[i]] + (getC())? 1:0;
+    WORD tmp = *AL + memory[map[i]] + (getC())? 1:0;
+
+    //flags
+    setN(0);
+    setZ(0);
+    setV(0);
+    setC(0);
+    if (tmp & 0x80) setN(1); //high bit is set 
+    if (tmp == 0) setZ(1);
+    if (tmp & 0x0100) setC(1); //rolled over 
+    if (!((A & 0x80) ^ (memory[map[i]] & 0x80)) && (tmp & 0x80) ^ (A & 0x80)) setV(1); //if sign of operands are the same and tmp is different than that 
+
+    A = tmp & 0xFF;
+
   } else {
-    A += (((WORD)memory[map[i+1]]) << 8 | memory[map[i]]) + (getC())? 1:0;
+    WORD m = (((WORD)memory[map[i+1]]) << 8 | memory[map[i]]);
+    unsigned long int tmp = A + m + (getC())? 1:0;
+
+    setN(0);
+    setZ(0);
+    setV(0);
+    setC(0);
+    if (tmp & 0x8000) setN(1);
+    if (tmp == 0) setZ(0);
+    if (tmp & 0x010000) setC(1);
+    if (!((A & 0x8000) ^ (m & 0x8000)) && (tmp & 0x8000) ^ (A & 0x8000)) setV(1);
+
+    A = tmp & 0xFFFF;
   }
 }
 
 void AND (ADDRESS i) { //"AND" Memory with Accumulator
-  *AL &= memory[map[i]];
-  *AH &= ~(getM()-1) | memory[map[i+1]]; //top byte if M = 0
+  setZ(0);
+  setN(0);
+
+  if (getM()) {
+    *AL &= memory[map[i]];
+
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A &= (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
 }
 
 //do memory only 
 //size of shifted area depends on M flag 
 void ASL (ADDRESS i) { //Shift One Bit Left, Memory or Accumulator
+
+  setZ(0);
+  setC(0);
+  setN(0);
+
   if (getM()) {
-    memory[map[i]] = memory[map[i]] >> 1;
+    BYTE m = memory[map[i]];
+    if (memory[map[i]] & 0x80) setC(1);
+    m = m << 1;
+    memory[map[i]] = m;
+
+    if (!m) setZ(1);
+    if (m & 0x80) setN(1);
+
   } else {
     WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
-    o = o >> 1;
+
+    if (o & 0x8000) setC(1);
+
+    o = o << 1;
     memory[map[i]] = o & 0xFF;
     memory[map[i+1]] = (o & 0xFF00) >> 8;
+    if (!o) setZ(1);
+    if (o & 0x8000) setN(1);
+    if (o * 0x01) setC(1);
   }
 }
 
@@ -185,9 +259,22 @@ void BEQ (ADDRESS i) { //Branch if Equal (Pz = 1)
   }
 }
 
-//TODO 
+//and but it only modifies flags, not A
 void BIT (ADDRESS i) { //Bit Test
-  //return to when doing flags 
+  setZ(0);
+  setN(0);
+
+  if (getM()) {
+    BYTE tmp = *AL & memory[map[i]];
+
+    if (!(tmp)) setZ(1);
+    if (tmp & 0x80) setN(1);
+  } else {
+    WORD tmp = A & (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+  }
 }
 
 void BMI (ADDRESS i) { //Branch if Result Minus (PN = 1)
@@ -214,6 +301,7 @@ void BRA (ADDRESS i) { //Branch Always
 }
 
 //implied addr 
+//TODO decimal and interupt flags 
 void BRK (void) { //Force Break         
   //vector is $FFE6-$FFE7 in native mode 
 }
@@ -236,97 +324,189 @@ void BVS (ADDRESS i) { //Branch on Overflow Set (Pv = 1)
 }
 
 void CLC (void) { //Clear Carry Flag                       
-  P &= 0xFE; //clear lowest bit 
+  setC(0);
 }
 
 void CLD (void) { //Clear Decimal Mode
-  P &= 0xF7; //clear 4th lowest bit 
+  setD(0);
 }
 
 void CLI (void) { //Clear Interrupt Disable Bit
-  P &= 0xFB; 
+  setI(0);
 }
 
 void CLV (void) { //Clear Overflow Flag
-  P &= 0xBF; 
+  setV(0);
 }
 
-//TODO when doing flags 
+//subtract memory from A, but don't change operands, see BIT 
 void CMP (ADDRESS i) { //Compare Memory and Accumulator
-  //flags 
+  setC(0);
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    BYTE m = memory[map[i]];
+    BYTE tmp = *AL - m;
+    if (!tmp) setZ(1);
+    if (tmp & 0x80) setN(1);
+    if (*AL < m) setC(1);
+  } else {
+    WORD m = ((WORD)memory[map[i+1]] << 8 | memory[map[i]]);
+    WORD tmp = A - m;
+
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (A < m) setC(1);
+  }
 }
 
+//TODO not at all imporant rn 
 void COP (ADDRESS i) { //Coprocessor                                
   //some vector 
 }
 
 void CPX (ADDRESS i) { //Compare Memory and Index X
-  //flags 
+  setC(0);
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    BYTE m = memory[map[i]];
+    BYTE tmp = *XL - m;
+    if(!tmp) setZ(1);
+    if(tmp & 0x80) setN(1);
+    if(*XL < m) setC(1);
+  } else {
+    WORD m = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    WORD tmp = X - m;
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (X < m) setC(1);
+  }
 }
 
 void CPY (ADDRESS i) { //Compare Memory and Index Y
-  //flags 
+  setC(0);
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    BYTE m = memory[map[i]];
+    BYTE tmp = *YL - m;
+    if(!tmp) setZ(1);
+    if(tmp & 0x80) setN(1);
+    if(*YL < m) setC(1);
+  } else {
+    WORD m = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    WORD tmp = Y - m;
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (Y < m) setC(1);
+  }
 }
 
 //follows M flag 
 //memory only version 
 void DEC (ADDRESS i) { //Decrement Memory or Accumulator by One  
+  setZ(0);
+  setN(0);
   if (getM()) {
-    memory[map[i]]--;
+    BYTE m = --(memory[map[i]]);
+    if (!m) setZ(1);
+    if (m & 0x80) setN(1);
   } else {
     WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
     o--;
     memory[map[i]] = o & 0xFF;
     memory[map[i+1]] = (o & 0xFF00) >> 8;
+    if (!o) setZ(1);
+    if (0 & 0x8000) setN(1);
   }
 }
 
 void DEX (void) { //Decrement Index X by One               
+  setZ(0);
+  setN(0);
   if (getX()) {
     *XL--;
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
   } else {
     X--;
+    if (!X) setZ(1);
+    if(X & 0x8000) setN(1);
   }
 }
 
 void DEY (void) { //Decrement Index Y by One
+  setZ(0);
+  setN(0);
   if (getX()) {
     *YL--;
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
   } else {
     Y--;
+    if (!Y) setZ(1);
+    if(Y & 0x8000) setN(1);
   }
 }
 
 void EOR (ADDRESS i) { //Exclusive "OR" Memory with Accumulator 
-  *AL ^= memory[map[i]];
-  if (!getM()) *AH ^= memory[map[i+1]];
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL ^= memory[map[i]];
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A ^= (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
 }
 
 //see DEC 
 void INC (ADDRESS i) { //Increment Memory or Accumulator by One     
+  setZ(0);
+  setN(0);
   if (getM()) {
-    memory[map[i]]++;
+    BYTE m = ++(memory[map[i]]);
+    if (!m) setZ(1);
+    if (m & 0x80) setN(1);
   } else {
     WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
     o++;
     memory[map[i]] = o & 0xFF;
     memory[map[i+1]] = (o & 0xFF00) >> 8;
+    if (!o) setZ(1);
+    if (o & 0x8000) setN(1);
   }
 }
 
 void INX (void) { //Increment Index X by One
+  setZ(0);
+  setN(0);
   if (getX()) {
     *XL++;
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
   } else {
     X++;
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
   }
 }
 
 void INY (void) { //Increment Index Y by One
+  setZ(0);
+  setN(0);
   if (getX()) {
     *YL++;
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
   } else {
     Y++;
+    if (!Y) setZ(1);
+    if (Y & 0x8000) setN(1);
   }
 }
 
@@ -353,34 +533,75 @@ void JSR (ADDRESS i) { //Jump to New Location Saving Return Address
 }
 
 void LDA (ADDRESS i) { //Load Accumulator with Memory
-  *AL = memory[map[i]];
-  if (!getM()) *AH = memory[map[i+1]];
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL = memory[map[i]];
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
 }
 
 void LDX (ADDRESS i) { //Load Index X with Memory
-  *XL = memory[map[i]];
-  if (!getX()) *XH = memory[map[i+1]];
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *XL = memory[map[i]];
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
+  } else {
+    X = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
+  }
 }
 
 void LDY (ADDRESS i) { //Load Index Y with Memory                  
-  *YL = memory[map[i]];
-  if (!getX()) *YH = memory[map[i+1]];
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *YL = memory[map[i]];
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
+  } else {
+    Y = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    if (!Y) setZ(1);
+    if (Y & 0x8000) setN(1);
+  }
 }
 
 //see ASL 
 void LSR (ADDRESS i) { //Shift One Bit Right (Memory or Accumulator) 
+  setZ(0);
+  setN(0);
+  setC(0);
   if (getM()) {
-    memory[map[i]] = memory[map[i]] << 1;
+    BYTE m = memory[map[i]];
+    if (m & 0x01) setC(1);
+    m = m >> 1;
+    memory[map[i]] = m;
+
+    if (!m) setZ(1);
+    if (m & 0x80) setN(1);
   } else {
     WORD o = (((WORD)memory[map[i+1]] << 8) | memory[map[i]]);
+    if (o & 0x01) setC(1);
     o = o << 1;
     memory[map[i]] = o & 0xFF;
     memory[map[i+1]] = (o & 0xFF00) >> 8;
+
+    if (!o) setZ(1);
+    if (o & 0x8000) setN(1);
   }
 }
 
 //uses full registers, basically must be in native m=0,x=0 mode. 
-//I *think* it's safe not to check P flags for this 
+//passed ADDRESSES should both be 0x00XX0000, just banks, not full addresses.
+//TODO consider doing these at optcode level
 void MVN (ADDRESS i[2]) { //Block Move Negative              !!! see xyc, block address
   while (A-- != 0xFFFF) {
     memory[map[i[1] | Y++]] = memory[map[i[0] | X++]];
@@ -390,7 +611,7 @@ void MVN (ADDRESS i[2]) { //Block Move Negative              !!! see xyc, block 
 
 //see above 
 void MVP (ADDRESS i[2]) { //Block Move Positive
-  while (A++ != 0xFFFF) {
+  while (A-- != 0xFFFF) {
     memory[map[i[1] | Y--]] = memory[map[i[0] | X--]];
   }
   //addresses are the top of the block area 
@@ -401,12 +622,22 @@ void NOP (void) { //No Operation
 }
 
 void ORA (ADDRESS i) { //"OR" Memory with Accumulator 
-  *AL |= memory[map[i]];
-  if (!getM()) *AH |= memory[map[i+1]];
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL |= memory[map[i]];
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A |= (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
 }
 
 //TODO this is dummy, and will not be called. can be cleaned later 
 //push 16b constant 
+//not suited, should be fixed in optcode 
 void PEA (ADDRESS i) { //Push Effective Absolute Address on Stack (or Push Immediate Data on Stack)
   pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]);
 }
@@ -463,85 +694,138 @@ void PHY (void) { //Push index Y on Stack
 }
 
 void PLA (void) { //Pull Accumulator from Stack
+  setZ(0);
+  setN(0);
   if (getM()) {
     *AL = popByte();
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
   } else {
     A = popWord();
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
   }
 }
 
 void PLB (void) { //Pull Data Bank Register from Stack
+  setZ(0);
+  setN(0);
   DB = popByte();
+  if (!DB) setZ(1);
+  if (DB & 0x80) setN(1);
 }
 
 void PLD (void) { //Pull Direct Register from Stack
-  D = popByte();
+  setZ(0);
+  setN(0);
+  D = popWord();
+  if (!D) setZ(1);
+  if (D & 0x8000) setN(1);
 }
 
 void PLP (void) { //Pull Processor Status from Stack
   P = popByte();
 }
 
-void PLX (vo id) { //Pull Index X from Stack
+void PLX (void) { //Pull Index X from Stack
+  setZ(0);
+  setN(0);
   if (getX()) {
     *XL = popByte();
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
   } else {
     X = popWord();
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
   }
 }
 
 void PLY (void) { //Pull Index Y form Stack
+  setZ(0);
+  setN(0);
   if (getX()) {
     *YL = popByte();
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
   } else {
     Y = popWord();
+    if (!Y) setZ(1);
+    if (Y & 0x8000) setN(1);
   }
 }
 
+//TODO takes constant, do at optcode level
+//I'll leave this as a dummy
 void REP (ADDRESS i) { //Reset Status Bits                         
   P &= ~(memory[map[i]]); //always 1 byte, even when regs. are 16b
 }
 
 //follow M flag for size, rotated bit is carry. 
+//mem only version
 void ROL (ADDRESS i) { //Rotate One Bit Left (Memory or Accumulator)     
+  setZ(0);
+  setN(0);
   if (getM()) {
-    memory[map[i]] = ((memory[map[i]] >> 1) & 0x8F ) | (getC() << 7);
+    BYTE out = getC();
+    setC(0);
+    out |= (memory[map[i]] << 1) & 0xFF;
+    memory[map[i]] = out;
+    if (!out) setZ(1);
+    if (out & 0x80) setN(1);
+    if (out & 0x80) setC(1);
   } else {
-    WORD o = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
-    o = ((o >> 1) & 0x8F) | (getC() << 7);
-    memory[map[i]] = o & 0xFF;
-    memory[map[i+1]] = (o & 0xFF00) >> 8;
+    WORD out = getC();
+    setC(0);
+    out |= (((WORD)memory[map[i+1]] << 8 | memory[map[i]]) << 1) & 0xFFFF;
+    if (!out) setZ(1);
+    if (out & 0x8000) setN(1);
+    if (out & 0x8000) setC(1);
   }
 }
 
 //see above 
 void ROR (ADDRESS i) { //Rotate One Bit Right (Memory or Accumulator)
+  setZ(0);
+  setN(0);
   if (getM()) {
-    memory[map[i]] = ((memory[map[i]] << 1) & 0xFE ) | getC();
+    BYTE out = getC() << 7;
+    setC(0);
+    out |= memory[map[i]] >> 1;
+    memory[map[i]] = out;
+    if (!out) setZ(1);
+    if (out & 0x80) setN(1);
+    if (out & 0x80) setC(1);
   } else {
-    WORD o = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
-    o = ((o << 1) & 0xFE) | getC();
-    memory[map[i]] = o & 0xFF;
-    memory[map[i+1]] = (o & 0xFF00) >> 8;
+    WORD out = getC() << 15;
+    setC(0);
+    out |= ((WORD)memory[map[i+1]] << 8 | memory[map[i]]) >> 1;
+    if (!out) setZ(1);
+    if (out & 0x8000) setN(1);
+    if (out & 0x8000) setC(1);
   }
 }
 
 //next three, caller convention is push PC before jmp
 //so to return, just pop PC
+//TODO must also restore status reg. P, be sure to push when handling an int. 
 void RTI (void) { //Return from Interrupt                     
   PC = popWord();
-  PB = popByte(); //not sure if this should be here? but I think so, see JML 
+  PB = popByte(); //not sure if this should be here? but I think so, see JML
+  P = popByte(); //restore status
 }
 
+//This and next have to inc by 1
 void RTL (void) { //Return from Subroutine Long
-  PC = popWord();
+  PC = popWord() + 1;
   PB = popByte(); 
 }
 
 void RTS (void) { //Return from Subroutine
-  PC = popWord();
+  PC = popWord() + 1;
 }
 
+//TODO pick up with the flags !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //follows M flag 
 void SBC (ADDRESS i) { //Subtract Memory from Accumulator with Borrow
   if (getM()) {
