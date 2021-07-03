@@ -134,12 +134,9 @@ WORD popWord() {
  */
 
 
-//TODO software side interupts, remember to push PB and then PC 
-
 //TODO add cycle counts. (maybe do on optcode and not on instruction?)
 
 //TODO fix which jumps set PB and which don't (branches also)
-//TODO set flags (use util functions) 
 //TODO decimal flag, see below
 
 /* NOTE ABOUT FLAGS AND ARITHMATIC
@@ -301,8 +298,15 @@ void BRA (ADDRESS i) { //Branch Always
 }
 
 //implied addr 
-//TODO decimal and interupt flags 
+//TODO PC inc BY TWO needs to happen *BEFORE* this  
 void BRK (void) { //Force Break         
+  pushByte(P);
+  pushByte(PB);
+  pushWord(PC);
+  setI(1);
+  PB = 0;
+  WORD jv = memory[map[0xFFE7]] << 8 | memory[map[0xFFE6]]; 
+  PC = jv; //load next instruction 
   //vector is $FFE6-$FFE7 in native mode 
 }
 
@@ -808,8 +812,8 @@ void ROR (ADDRESS i) { //Rotate One Bit Right (Memory or Accumulator)
 
 //next three, caller convention is push PC before jmp
 //so to return, just pop PC
-//TODO must also restore status reg. P, be sure to push when handling an int. 
 void RTI (void) { //Return from Interrupt                     
+  //says it should clear I, but P gets restored anyway??? 
   PC = popWord();
   PB = popByte(); //not sure if this should be here? but I think so, see JML
   P = popByte(); //restore status
@@ -825,29 +829,47 @@ void RTS (void) { //Return from Subroutine
   PC = popWord() + 1;
 }
 
-//TODO pick up with the flags !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //follows M flag 
+//slight doubts about sign/flag issues here? 
 void SBC (ADDRESS i) { //Subtract Memory from Accumulator with Borrow
+  setN(0);
+  setZ(0);
+  setV(0);
   if (getM()) {
-    *AL = *AL - memory[map[i]] - (getC())? 0:1;
+    BYTE m = memory[map[i]];
+    BYTE tmp = *AL - m - (getC())? 0:1; //sub if carry is clear 
+    setC(0);
+    if (!tmp) setZ(1);
+    if (tmp & 0x80) setN(1);
+    if (m <= *AL) setC(1); //set if borrow not required 
+    if ((0x80 & *AL) ^ (0x80 & m) && (0x80 & *AL) ^ (0x80 & tmp)) setV(1); //if operands have diff. signs & output and first op differ 
+    *AL = tmp;
   } else {
-    A = A - (((WORD)memory[map[i+1]]) << 8 | memory[map[i]]) - (getC())? 0:1; 
+    WORD m = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    WROD tmp = A - m - (getC())? 0:1; 
+    setC(0);
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (m <= A) setC(1);
+    if ((0x8000 & A) ^ (0x80000 & m) && (0x8000 & A) ^ (0x8000 & tmp)) setV(1); //see above 
+    A = tmp;
   }
 }
 
 void SEC (void) { //Set Carry Flag                        
-  P |= 0x01;
+  setC(1);
 }
 
 void SED (void) { //Set Decimal Mode
-  P |= 0x08;
+  setD(1);
 }
 
+//set automatically when accepting interupt. 
 void SEI (void) { //Set Interrupt Disable Status
-  P |= 0x04;
+  setI(1);
 }
 
-//takes constant 
+//TODO do on optcode level, takes constant 
 //opposite of clear P bits I think?
 void SEP (ADDRESS i) { //Set Processor Status Bits              
   P |= memory[map[i]];
@@ -881,79 +903,202 @@ void STY (ADDRESS i) { //Store Index Y in Memory
 
 void STZ (ADDRESS i) { //Store Zero in Memory
   memory[map[i]] = 0;
+  if (!getM()) {
+    memory[map[i+1]] = 0;
+  }
 }
 
+//size by destination 
 void TAX (void) { //Transfer Accumulator to Index X
-  X = A;
+  setN(0);
+  setZ(0);
+  if (getX()) {
+    *XL = *AL;
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
+  } else {
+    X = A;
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
+  }
 }
 
 void TAY (void) { //Transfer Accumulator to Index Y
-  Y = A;
+  if (getX()) {
+    *YL = *AL;
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
+  } else {
+    Y = A;
+    if (!Y) setZ(1);
+    if (Y & 0x8000) setN(1);
+  }
 }
 
+//ignores m flag 
 void TCD (void) { //Transfer Accumulator to Direct Register
+  setZ(0);
+  setN(0);
   D = A;
+  if (!D) setZ(1);
+  if (D & 0x8000) setN(1);
 }
 
+//ignores m flag 
+//does not set flags 
 void TCS (void) { //Transfer Accumulator to Stack Pointer Register
   S = A;
 }
 
+//ignores m flag 
 void TDC (void) { //Transfer Direct Register to Accumulator
-  A = D
+  setZ(0);
+  setN(0);
+  A = D;
+  if (!A) setZ(1);
+  if (A & 0x8000) setN(1);
 }
 
-//TODO 
-//flags I guess? not sure what this does 
-//and memory and A, reset affected bits in memory, set Z  
+
+//and memory and ~A, reset affected bits in memory, set Z  
 void TRB (ADDRESS i) { //Test and Reset Bit
-  
+  setZ(0);
+  if (getM()) {
+    BYTE m = memory[map[i]];
+    memory[map[i]] = (~(*AL)) & m;
+    if (!(m & (*AL))) setZ(1); //slightly different operation, see BIT
+  } else {
+    WORD m = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    WORD tmp = (~A) & m;
+    memory[map[i]] = tmp & 0xFF;
+    memory[map[i+1]] = (tmp & 0xFF00) >> 8;
+    if (!(m & A)) setZ(1); //slightly different operation, see BIT
+  }
 }
 
 //see above, but set bits in memory 
 void TSB (ADDRESS i) { //Test and Set Bit
-
+  setZ(0);
+  if (getM()) {
+    BYTE m = memory[map[i]];
+    memory[map[i]] = (*AL) | m;
+    if (!(m & (*AL))) setZ(1); //slightly different operation, see BIT
+  } else {
+    WORD m = (WORD)memory[map[i+1]] << 8 | memory[map[i]];
+    WORD tmp = A | m;
+    memory[map[i]] = tmp & 0xFF;
+    memory[map[i+1]] = (tmp & 0xFF00) >> 8;
+    if (!(m & A)) setZ(1); //slightly different operation, see BIT
+  }
 }
 
+//ignores m flag 
 void TSC (void) { //Transfer Stack Pointer Register to Accumulator
+  setZ(0);
+  setN(0);
   A = S;
+  if (!A) setZ(1);
+  if (A & 0x8000) setN(1);
 }
 
 void TSX (void) { //Transfer Stack Pointer Register to Index X
-  X = S;
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *XL = S & 0xFF;
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
+  } else {
+    X = S;
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
+  }
 }
 
+//size follows destination 
 void TXA (void) { //Transfer Index X to Accumulator
-  A = X;
+  setN(0);
+  setZ(0);
+  if (getM()) {
+    *AL = *XL;
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A = X;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
 }
 
+//follows X but does not set flags 
 void TXS (void) { //Transfer Index X to Stack Polnter Register
-  S = X;
+  if (getX()) {
+    S = *XL; //high byte is 0
+  } else {
+    S = X; //both bytes 
+  }
 }
 
 void TXY (void) { //Transfer Index X to Index Y
-  Y = X;
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *YL = *XL;
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
+  } else {
+    Y = X;
+    if (!Y) setZ(1);
+    if (Y & 0x8000) setN(1);
+  }
 }
 
+//size follows destination 
 void TYA (void) { //Transfer Index Y to Accumulator
-  A = Y;
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL = *YL;
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A = Y;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
 }
 
 void TYX (void) { //Transfer Index Y to Index X
-  X = Y;
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *XL = *YL;
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
+  } else {
+    X = Y;
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
+  }
 }
 
 //TODO waiting 
+//if I (ignore int.) is set, then will simply continue to the next instruciton, not jump to int vec. 
 void WAI (void) { //Wait for Interrupt
   
 }
 
 void XBA (void) { //Exchange AH and AL
-  BYTE tmp = AH;
-  AH = AL;
-  AL = tmp;
+  setZ(0);
+  setN(0);
+  BYTE tmp = *AH;
+  *AH = *AL;
+  *AL = tmp;
+  if (!(*AL)) setZ(1);
+  if (*AL & 0x80) setN(1);
 }
 
+//emulation mode is not implimented here, so some flag changes will be ignored for the time being 
 void XCE (void) { //Exchange Carry and Emulation Bits      
   BYTE tmp = P & 0x01;
   P &= 0xFE;
