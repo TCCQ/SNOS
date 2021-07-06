@@ -7,7 +7,7 @@
  * Those modes will be implimented either in the instruction function or in the optcode function 
  */
 
-#include "optcode.h"
+#include "address.h"
 
 //boolean for size of index X/Y reg.s 1 if 8b, 0 if 16b
 static inline BYTE getX() {
@@ -21,12 +21,6 @@ static inline BYTE getX() {
  * This means there is an inherent branch operation. 
  * This seems ineffiecient, but I can't see any way around it
  */
-
-//TODO !!!!! fix this. at the moment PC points to the *NEXT* instruction, this is meaningless 
-//this will not be used, as constants will be passed in the optcode. 
-ADDRESS immediate (void) {//# 
-  return (((ADDRESS)PB << 16) | PC) + 1;
-}
 
 ADDRESS absolute (BYTE i, BYTE j) { //a
   return ((ADDRESS)DB << 16) | (j << 8) | (i);

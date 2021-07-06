@@ -7,5 +7,7 @@ Over the full life of this project, if things go as planned, then the emulator w
 
 Consult `TODO.md` for the challenges of this project and my plan going forward.
 
+The documentation directory contains some useful information about the snes, but is quite dense and dry 
+
 65c816 reference taken from https://www.zophar.net/fileuploads/2/10539nbbdh/65c816.txt
 Further optcode info taken from https://wiki.superfamicom.org/65816-reference 

@@ -115,41 +115,6 @@ unsigned char signals[5];
  * VPA = 0
  */
 
-
-/*
- * 24 ways of adressing memory 
- * comment after declaration is the abbreviation for that address mode 
- * some of these are dummy declarations that will not be called, here for posterity 
- */
-ADDRESS immediate (BYTE, BYTE); //#      
-ADDRESS absolute (BYTE, BYTE); //a
-ADDRESS absoluteLong (BYTE, BYTE, BYTE); //al
-ADDRESS direct (BYTE); //d
-ADDRESS accumulator (void); //A         
-ADDRESS implied (void); //i            
-ADDRESS directIndirectIndexed (BYTE); //(d),y
-ADDRESS directIndirectIndexedLong (BYTE); //[d],y
-ADDRESS directIndexedIndirect (BYTE); //(d,x)
-ADDRESS directIndexedWithX (BYTE); //d,x
-ADDRESS directIndexedWithY (BYTE); //d,y
-ADDRESS absoluteIndexedWithX (BYTE, BYTE); //a,x
-ADDRESS absoluteIndexedWithY (BYTE, BYTE); //a,y
-ADDRESS absoluteLongIndexedWithX (BYTE, BYTE, BYTE); //al,x
-ADDRESS programCounterRelative (BYTE); //r
-ADDRESS programCounterRelativeLong (BYTE, BYTE); //rl
-ADDRESS absoluteIndirect (BYTE, BYTE); //(a)
-ADDRESS directIndirect (BYTE); //(d)
-ADDRESS directIndirectLong (BYTE); //[d]
-ADDRESS absoluteIndexedIndirect (BYTE, BYTE); //(a,x)
-ADDRESS stack (void); //s             
-ADDRESS stackRelative (BYTE); //d,s
-ADDRESS stackRelativeIndirectIndexed (BYTE); //(d,s),y
-ADDRESS[2] blockSourceBankDestinationBank (BYTE, BYTE); //xyc
-/*
- * end of addressing mode declarations  
- */
-
-
 /* MEMORY 
  * covers whole area, accessed as memory[map[i]] 
  * map allows mirroring, should be setup at beinging and not changed. 
