@@ -21,6 +21,8 @@ static inline BYTE getX() {
  * This means there is an inherent branch operation. 
  * This seems ineffiecient, but I can't see any way around it
  */
+//TODO needs confirmation
+//as far as I can tell, all memory calls in all other files should be NoWrap variants.
 
 ADDRESS absolute (BYTE i, BYTE j) { //a
   return ((ADDRESS)DB << 16) | (j << 8) | (i);
@@ -35,84 +37,77 @@ ADDRESS direct (BYTE i) { //d
 }
 
 ADDRESS directIndirectIndexed (BYTE i) { //(d),y
-  return (((((ADDRESS)D) + i) & 0xFFFF ) | (DB << 16) ) + ((getX())? (Y & 0xFF):(Y)); //8b/16b switch.
+  return (((ADDRESS)DB << 16) | getWordNoWrap(direct(i))) + (getX())? *YL:Y;
 }
 
 ADDRESS directIndirectIndexedLong (BYTE i) { //[d],y
-  return ((((ADDRESS)D) + i) & 0xFFFF ) + ((getX())? (Y & 0xFF):(Y));
+  return getAddressNoWrap(direct(i)) + (getX())?*YL:y;
 }
 
 ADDRESS directIndexedIndirect (BYTE i) { //(d,x)
-  return (((((ADDRESS)D) + i) + ((getX())? (X & 0xFF):(X)) )  & 0xFFFF ) | (DB << 16);
+  return getWordNoWrap(directIndexedWithX(i)) | ((ADDRESS)DB << 16);
 }
 
 ADDRESS directIndexedWithX (BYTE i) { //d,x
-  return ((((ADDRESS)D) + i) + ((getX())? (X & 0xFF):(X))) & 0xFFFF;
+  return ((direct(i) + (getX())?*XL:X)) & 0xFFFF;
 }
 
 ADDRESS directIndexedWithY (BYTE i) { //d,y
-  return ((((ADDRESS)D) + i) + ((getX())? (Y & 0xFF):(Y))) & 0xFFFF;
+  return ((direct(i) + (getX())?*YL:Y)) & 0xFFFF;
 }
 
 ADDRESS absoluteIndexedWithX (BYTE i, BYTE j) { //a,x
-  return ((((ADDRESS)D) << 16) | (j << 8) | i) + ((getX())? (X & 0xFF):(X));
+  return ((((ADDRESS)DB) << 16) | (j << 8) | i) + ((getX())? *XL:X);
 }
 
 ADDRESS absoluteIndexedWithY (BYTE i, BYTE j) { //a,y
-  return ((((ADDRESS)D) << 16) | (j << 8) | i) + ((getX())? (Y & 0xFF):(Y));
+  return ((((ADDRESS)D) << 16) | (j << 8) | i) + ((getX())? *YL:Y);
 }
 
 ADDRESS absoluteLongIndexedWithX (BYTE i, BYTE j, BYTE k) { //al,x
-  return ((((ADDRESS)k) << 16) | (j << 8) | i) + ((getX())? (X & 0xFF):(X));
+  return (absoluteLong(i,j,k)) + ((getX())? *XL:X);
 }
 
 //PC inc happens BEFORE this 
 ADDRESS programCounterRelative (BYTE i) { //r
-  return (ADDRESS)(PC + ((signed)i)); //cast later to avoid changing 0x00FF0000 byte 
+  return (ADDRESS)(PC + ((signed)i)) & 0xFFFF; //cast later to avoid changing 0x00FF0000 byte 
 }
 
 //again, AFTER inc.ed PC 
 ADDRESS programCounterRelativeLong (BYTE i, BYTE j) { //rl
-  return (ADDRESS)(PC + (((WORD)j) << 8) + i); //this one is not signed 
+  return (ADDRESS)(PC + (((WORD)j) << 8) + i) & 0xFFFF; //this one is not signed 
 }
 
+//full 24b address, will be split into PB and PC by caller, see JML
+//two byte addr in bank 00, then deref word + PB, used for jumps?
 ADDRESS absoluteIndirect (BYTE i, BYTE j) { //(a)
-  return  *((ADDRESS*)(&memory[(((ADDRESS)j) << 16 ) | i]) ) & 0xFFFFFF; 
-  //deref passed ptr in bank 00, take 24 bits from that location 
+  return (ADDRESS)getWordNoWrap(((ADDRESS)j << 8 ) | i) | ((ADDRESS)PB << 16);
 }
 
 ADDRESS directIndirect (BYTE i) { //(d)
-  return (*((ADDRESS*)(&memory[(((ADDRESS)D) + i) & 0xFFFF]) ) & 0xFFFF) | (((ADDRESS)DB) << 16); 
-  //construct ptr in bank 0, deref, take 16b and return in DB
+  return (ADDRESS)getWordNoWrap(direct(i)) | ((ADDRESS)DB << 16) 
 }
 
 //this is above but but pull all 3 bytes, not just 2 + DB
 ADDRESS directIndirectLong (BYTE i) { //[d]
-  return *((ADDRESS*)(&memory[(((ADDRESS)D) + i) & 0xFFFF]) ) & 0xFFFFFF; 
+  return getAddressNoWrap(direct(i));
 }
 
-//TODO confirm if I need to deref this location. see mode 20
+//this returns an 16b value to placing in PC
+//derefs a bank 00 location for 16b
+//adding X wraps to bank
 ADDRESS absoluteIndexedIndirect (BYTE i, BYTE j) { //(a,x)
-  return *((ADDRESS*)&memory[(((((ADDRESS)j) << 8) | i ) & 0xFFFF + ((getX())? (X & 0xFF):(X)) ) & 0xFFFF]) & 0xFFFF;
+  return (ADDRESS)getWordWrap(((((ADDRESS)j << 8) | i) + (getX())? *XL:X) & 0xFFFF);
 }
 
-//TODO check stack conventions for SNES 
+//returns 16b (stack is in bank 00) location above the current stack pointer
 ADDRESS stackRelative (BYTE i) { //d,s
-  return (((ADDRESS)S) + i) & 0xFFFF; 
+  return ((ADDRESS)S + i) & 0xFFFF; 
   //i is unsigned, can only reference things above the stack ptr. 
 }
 
-//TODO confirm deref? 
+//defref stack relative for 16b + DB + Y
 ADDRESS stackRelativeIndirectIndexed (BYTE i) { //(d,s),y
-  return ((*((ADDRESS*)&memory[(((ADDRESS)S) + i) & 0xFFFF]) & 0xFFFF) | (((ADDRESS)DB) << 16)) + ((getX())? (Y & 0xFF):(Y));
+  return (((ADDRESS)DB << 16 ) | getWord(stackRelative(i)) ) + (getX())? *YL:Y;
 }
 
-//TODO confirm DB assignment 
-ADDRESS[2] blockSourceBankDestinationBank (BYTE i, BYTE j) { //xyc
-  ADDRESS out[2];
-  out[1] = ((ADDRESS)((getX())? (X & 0xFF):(X))) | (((ADDRESS)j) << 16); //source 
-  //NEEDS TO ASSIGN TO DB, should I do that here? 
-  DB = i;
-  out[0] = ((ADDRESS)((getX())? (Y & 0xFF):(Y))) | (((ADDRESS)DB) << 16); //destination 
-  return out;
-}

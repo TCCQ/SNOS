@@ -115,15 +115,6 @@ unsigned char signals[5];
  * VPA = 0
  */
 
-/* MEMORY 
- * covers whole area, accessed as memory[map[i]] 
- * map allows mirroring, should be setup at beinging and not changed. 
- * TODO investigate hiROM/loROM 
- */
-ADDRESS map[0xFFFFFF];
-BYTE memory[0xFFFFFF]; 
-
-
 
 //some instructions have constant versions, or change a register OR a memory location
 //for those cases, the below declared function will handle the memory version. The constant or register version will be done 
