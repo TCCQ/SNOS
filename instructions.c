@@ -13,7 +13,6 @@
 //N V M X/B D I Z C E 
 //
 //useful links
-//https://wiki.superfamicom.org/65816-reference#asl-left-shifts-accumulator-memory-366
 //https://apprize.best/programming/65816/21.html
 
 //utility functions 
@@ -135,7 +134,6 @@ WORD popWord() {
 //TODO add cycle counts. (maybe do on optcode and not on instruction?)
 
 //TODO fix which jumps set PB and which don't (branches also)
-//TODO decimal flag, see below
 
 /* NOTE ABOUT FLAGS AND ARITHMATIC
  * ok so a few things 
@@ -147,39 +145,85 @@ WORD popWord() {
  * IMPORTANT!!!
  * decimal is more complicated
  * if D is set, then use BCD not regular binary. This seems like a collosal pain, so its on the backburner for now
- *  tentative plan is to just convert to binary, math, then convert back
+ * D flag is only checked on ADC and SBC (add/subtract w/ carry)
  */
 
 void ADC (ADDRESS i) { //Add Memory to Accumulator with Carry
-  if (getM()) {
-    WORD tmp = *AL + getByte(i) + (getC())? 1:0; //FIX
+  if (getD()) { //BCD addition
+    if (getM()) {
+      BYTE m = getByte(i);
+      BYTE tmp = (*AL & 0x0F) + (((*AL & 0xF0) >> 4)*10);
+      tmp += (m & 0x0F) + (((m & 0xF0) >> 4)*10);
+      tmp += (getC())? 1:0;
 
-    //flags
-    setN(0);
-    setZ(0);
-    setV(0);
-    setC(0);
-    if (tmp & 0x80) setN(1); //high bit is set 
-    if (tmp == 0) setZ(1);
-    if (tmp & 0x0100) setC(1); //rolled over 
-    if (!((A & 0x80) ^ (getByte(i) & 0x80)) && (tmp & 0x80) ^ (A & 0x80)) setV(1); //if sign of operands are the same and tmp is different than that  //FIX
+      //value is set
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x80) setN(1);
+      if (!tmp) setZ(1);
+      if (tmp > 99) setC(1);
+      if (tmp & 0x80) setV(1); //TODO I guess it follows N?
+      //use m as scratch here
+      m = tmp % 10; //bottom 4 bits
+      tmp = (tmp / 10) %10; //high 4b
+      tmp <<= 4;
+      tmp |= m;
+      *AL = tmp;
+    } else { //16b
+      WORD m = getWord(i);
+      WORD tmp = (A & 0x000F) + (((A & 0x00F0) >> 4)*10) + (((A & 0x0F00)>>8)*100) + (((A & 0xF000)>>12)*1000);
+      tmp += (m & 0x000F) + (((m & 0x00F0) >> 4)*10) + (((m & 0x0F00)>>8)*100) + (((m & 0xF000)>>12)*1000); 
+      tmp += (getC())? 1:0;
 
-    A = tmp & 0xFF;
+      //value is set
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x8000) setN(1);
+      if (!tmp) setZ(1);
+      if (tmp > 9999) setC(1);
+      if (tmp & 0x8000) setV(1); 
+      m = tmp; //copy
+      tmp %= 10; //bottom 4 bits
+      tmp |= ((m/10)%10) << 4;
+      tmp |= ((m/100)%10) << 8;
+      tmp |= ((m/1000)%10) << 12;
+      A = tmp;
+    }
+  } else { //normal binary
+    if (getM()) {
+      WORD tmp = *AL + getByte(i) + (getC())? 1:0; 
 
-  } else {
-    WORD m = getWordNoWrap(i); //FIX
-    unsigned long int tmp = A + m + (getC())? 1:0;
+      //flags
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x80) setN(1); //high bit is set 
+      if (tmp == 0) setZ(1);
+      if (tmp & 0x0100) setC(1); //rolled over 
+      if (!((A & 0x80) ^ (getByte(i) & 0x80)) && (tmp & 0x80) ^ (A & 0x80)) setV(1); //if sign of operands are the same and tmp is different than that  
 
-    setN(0);
-    setZ(0);
-    setV(0);
-    setC(0);
-    if (tmp & 0x8000) setN(1);
-    if (tmp == 0) setZ(0);
-    if (tmp & 0x010000) setC(1);
-    if (!((A & 0x8000) ^ (m & 0x8000)) && (tmp & 0x8000) ^ (A & 0x8000)) setV(1);
+      A = tmp & 0xFF;
 
-    A = tmp & 0xFFFF;
+    } else {
+      WORD m = getWordNoWrap(i); 
+      unsigned long int tmp = A + m + (getC())? 1:0;
+
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x8000) setN(1);
+      if (tmp == 0) setZ(0);
+      if (tmp & 0x010000) setC(1);
+      if (!((A & 0x8000) ^ (m & 0x8000)) && (tmp & 0x8000) ^ (A & 0x8000)) setV(1);
+
+      A = tmp & 0xFFFF;
+    }
   }
 }
 
@@ -193,7 +237,7 @@ void AND (ADDRESS i) { //"AND" Memory with Accumulator
     if (!(*AL)) setZ(1);
     if (*AL & 0x80) setN(1);
   } else {
-    A &= getWordNoWrap(i); //FIX
+    A &= getWordNoWrap(i); 
     
     if (!A) setZ(1);
     if (A & 0x8000) setN(1);
@@ -209,16 +253,16 @@ void ASL (ADDRESS i) { //Shift One Bit Left, Memory or Accumulator
   setN(0);
 
   if (getM()) {
-    BYTE m = getByte(i); //FIX
-    if (m & 0x80) setC(1); //FIX
+    BYTE m = getByte(i); 
+    if (m & 0x80) setC(1); 
     m = m << 1;
-    setByte(i,m); //FIX
+    setByte(i,m); 
 
     if (!m) setZ(1);
     if (m & 0x80) setN(1);
 
   } else {
-    WORD o = getWordNoWrap(i); //FIX
+    WORD o = getWordNoWrap(i); 
 
     if (o & 0x8000) setC(1);
 
@@ -259,12 +303,12 @@ void BIT (ADDRESS i) { //Bit Test
   setN(0);
 
   if (getM()) {
-    BYTE tmp = *AL & getByte(i); //FIX
+    BYTE tmp = *AL & getByte(i); 
 
     if (!(tmp)) setZ(1);
     if (tmp & 0x80) setN(1);
   } else {
-    WORD tmp = A & getWordNoWrap(i); //FIX
+    WORD tmp = A & getWordNoWrap(i); 
     
     if (!tmp) setZ(1);
     if (tmp & 0x8000) setN(1);
@@ -346,13 +390,13 @@ void CMP (ADDRESS i) { //Compare Memory and Accumulator
   setZ(0);
   setN(0);
   if (getM()) {
-    BYTE m = getByte(i); //FIX
+    BYTE m = getByte(i); 
     BYTE tmp = *AL - m;
     if (!tmp) setZ(1);
     if (tmp & 0x80) setN(1);
     if (*AL < m) setC(1);
   } else {
-    WORD m = getWordNoWrap(i); //FIX
+    WORD m = getWordNoWrap(i); 
     WORD tmp = A - m;
 
     if (!tmp) setZ(1);
@@ -371,13 +415,13 @@ void CPX (ADDRESS i) { //Compare Memory and Index X
   setZ(0);
   setN(0);
   if (getX()) {
-    BYTE m = getByte(i); //FIX
+    BYTE m = getByte(i); 
     BYTE tmp = *XL - m;
     if(!tmp) setZ(1);
     if(tmp & 0x80) setN(1);
     if(*XL < m) setC(1);
   } else {
-    WORD m = getWordNoWrap(i); //FIX
+    WORD m = getWordNoWrap(i); 
     WORD tmp = X - m;
     if (!tmp) setZ(1);
     if (tmp & 0x8000) setN(1);
@@ -390,13 +434,13 @@ void CPY (ADDRESS i) { //Compare Memory and Index Y
   setZ(0);
   setN(0);
   if (getX()) {
-    BYTE m getByte(i)= ; //FIX
+    BYTE m getByte(i)= ; 
     BYTE tmp = *YL - m;
     if(!tmp) setZ(1);
     if(tmp & 0x80) setN(1);
     if(*YL < m) setC(1);
   } else {
-    WORD m = getWordNoWrap(i); //FIX
+    WORD m = getWordNoWrap(i); 
     WORD tmp = Y - m;
     if (!tmp) setZ(1);
     if (tmp & 0x8000) setN(1);
@@ -410,13 +454,13 @@ void DEC (ADDRESS i) { //Decrement Memory or Accumulator by One
   setZ(0);
   setN(0);
   if (getM()) {
-    BYTE m = getByte(i); //FIX
+    BYTE m = getByte(i); 
     m--;
     setByte(i,m);
     if (!m) setZ(1);
     if (m & 0x80) setN(1);
   } else {
-    WORD o = getWordNoWrap(i); //FIX
+    WORD o = getWordNoWrap(i); 
     o--;
     setWordNoWrap(i,o);
     if (!o) setZ(1);
@@ -456,11 +500,11 @@ void EOR (ADDRESS i) { //Exclusive "OR" Memory with Accumulator
   setZ(0);
   setN(0);
   if (getM()) {
-    *AL ^= getbyte(i); //FIX
+    *AL ^= getbyte(i); 
     if (!(*AL)) setZ(1);
     if (*AL & 0x80) setN(1);
   } else {
-    A ^= getWordNoWrap(i); //FIX
+    A ^= getWordNoWrap(i); 
     if (!A) setZ(1);
     if (A & 0x8000) setN(1);
   }
@@ -471,13 +515,13 @@ void INC (ADDRESS i) { //Increment Memory or Accumulator by One
   setZ(0);
   setN(0);
   if (getM()) {
-    BYTE m = getByte(i); //FIX
+    BYTE m = getByte(i); 
     m++;
     setByte(i,m)
     if (!m) setZ(1);
     if (m & 0x80) setN(1);
   } else {
-    WORD o = getWordNoWrap(i); //FIX
+    WORD o = getWordNoWrap(i); 
     o++;
     setWordNoWrap(i,o);
     if (!o) setZ(1);
@@ -539,11 +583,11 @@ void LDA (ADDRESS i) { //Load Accumulator with Memory
   setZ(0);
   setN(0);
   if (getM()) {
-    *AL = getByte(i); //FIX
+    *AL = getByte(i); 
     if (!(*AL)) setZ(1);
     if (*AL & 0x80) setN(1);
   } else {
-    A = getWordNoWrap(i); //FIX
+    A = getWordNoWrap(i); 
     if (!A) setZ(1);
     if (A & 0x8000) setN(1);
   }
@@ -553,11 +597,11 @@ void LDX (ADDRESS i) { //Load Index X with Memory
   setZ(0);
   setN(0);
   if (getX()) {
-    *XL = getByte(i); //FIX
+    *XL = getByte(i); 
     if (!(*XL)) setZ(1);
     if (*XL & 0x80) setN(1);
   } else {
-    X = getWordNoWrap(i); //FIX
+    X = getWordNoWrap(i); 
     if (!X) setZ(1);
     if (X & 0x8000) setN(1);
   }
@@ -567,11 +611,11 @@ void LDY (ADDRESS i) { //Load Index Y with Memory
   setZ(0);
   setN(0);
   if (getX()) {
-    *YL = getByte(i); //FIX
+    *YL = getByte(i); 
     if (!(*YL)) setZ(1);
     if (*YL & 0x80) setN(1);
   } else {
-    Y = getWordNoWrap(i); //FIX
+    Y = getWordNoWrap(i); 
     if (!Y) setZ(1);
     if (Y & 0x8000) setN(1);
   }
@@ -583,15 +627,15 @@ void LSR (ADDRESS i) { //Shift One Bit Right (Memory or Accumulator)
   setN(0);
   setC(0);
   if (getM()) {
-    BYTE m = getByte(i); //FIX
+    BYTE m = getByte(i); 
     if (m & 0x01) setC(1);
     m = m >> 1;
-    setbyte(i,m); //FIX
+    setbyte(i,m); 
 
     if (!m) setZ(1);
     if (m & 0x80) setN(1);
   } else {
-    WORD o = getWordNoWrap(i); //FIX
+    WORD o = getWordNoWrap(i); 
     if (o & 0x01) setC(1);
     o = o << 1;
     setWordNoWrap(i,o);
@@ -605,7 +649,7 @@ void LSR (ADDRESS i) { //Shift One Bit Right (Memory or Accumulator)
 //TODO do this and the following at the optcode level
 void MVN (ADDRESS i[2]) { //Block Move Negative              !!! see xyc, block address
   while (A-- != 0xFFFF) {
-    memory[map[i[1] | Y++]] = memory[map[i[0] | X++]]; //FIX
+    memory[map[i[1] | Y++]] = memory[map[i[0] | X++]]; 
   }
   //address are bottom of the block area 
 }
@@ -613,7 +657,7 @@ void MVN (ADDRESS i[2]) { //Block Move Negative              !!! see xyc, block 
 //see above 
 void MVP (ADDRESS i[2]) { //Block Move Positive
   while (A-- != 0xFFFF) {
-    memory[map[i[1] | Y--]] = memory[map[i[0] | X--]]; //FIX
+    memory[map[i[1] | Y--]] = memory[map[i[0] | X--]]; 
   }
   //addresses are the top of the block area 
 }
@@ -627,11 +671,11 @@ void ORA (ADDRESS i) { //"OR" Memory with Accumulator
   setZ(0);
   setN(0);
   if (getM()) {
-    *AL |= getByte(i); //FIX
+    *AL |= getByte(i); 
     if (!(*AL)) setZ(1);
     if (*AL & 0x80) setN(1);
   } else {
-    A |= getWordNoWrap(i); //FIX
+    A |= getWordNoWrap(i); 
     if (!A) setZ(1);
     if (A & 0x8000) setN(1);
   }
@@ -641,18 +685,18 @@ void ORA (ADDRESS i) { //"OR" Memory with Accumulator
 //push 16b constant 
 //not suited, should be fixed in optcode 
 void PEA (ADDRESS i) { //Push Effective Absolute Address on Stack (or Push Immediate Data on Stack)
-  pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]); //FIX
+  pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]); 
 }
 
 //deref'd memory, (this one not an in code constant)
 //TODO check whether this derefs twice or once
 void PEI (ADDRESS i) { //Push Effective Indirect Address on Stack (add one cycle if DL f 0)
-  pushWord(getWordNoWrap(i)); //FIX
+  pushWord(getWordNoWrap(i)); 
 }
 
 //push address, not deref'd
 void PER (ADDRESS i) { //Push Effective Program Counter Relative Address on Stack
-  pushWord((WORD)i); //FIX
+  pushWord((WORD)i); 
 }
 
 //these use size switches, confirm that that is intended.
@@ -761,7 +805,7 @@ void PLY (void) { //Pull Index Y form Stack
 //TODO takes constant, do at optcode level
 //I'll leave this as a dummy
 void REP (ADDRESS i) { //Reset Status Bits                         
-  P &= ~(memory[map[i]]); //always 1 byte, even when regs. are 16b //FIX
+  P &= ~(memory[map[i]]); //always 1 byte, even when regs. are 16b 
 }
 
 //follow M flag for size, rotated bit is carry. 
@@ -772,7 +816,7 @@ void ROL (ADDRESS i) { //Rotate One Bit Left (Memory or Accumulator)
   if (getM()) {
     BYTE out = getC();
     setC(0);
-    out |= (getByte(i) << 1) & 0xFF; //FIX
+    out |= (getByte(i) << 1) & 0xFF; 
     setByte(i, out);
     if (!out) setZ(1);
     if (out & 0x80) setN(1);
@@ -780,7 +824,7 @@ void ROL (ADDRESS i) { //Rotate One Bit Left (Memory or Accumulator)
   } else {
     WORD out = getC();
     setC(0);
-    out |= (getWordNoWrap(i) << 1) & 0xFFFF; //FIX
+    out |= (getWordNoWrap(i) << 1) & 0xFFFF; 
     setWordNoWrap(i,out);
     if (!out) setZ(1);
     if (out & 0x8000) setN(1);
@@ -795,7 +839,7 @@ void ROR (ADDRESS i) { //Rotate One Bit Right (Memory or Accumulator)
   if (getM()) {
     BYTE out = getC() << 7;
     setC(0);
-    out |= getByte(i) >> 1; //FIX
+    out |= getByte(i) >> 1; 
     setByte(i, out);
     if (!out) setZ(1);
     if (out & 0x80) setN(1);
@@ -803,7 +847,7 @@ void ROR (ADDRESS i) { //Rotate One Bit Right (Memory or Accumulator)
   } else {
     WORD out = getC() << 15;
     setC(0);
-    out |= (getWord(i)) >> 1; //FIX
+    out |= (getWord(i)) >> 1; 
     setWordNoWrap(i, out);
     if (!out) setZ(1);
     if (out & 0x8000) setN(1);
@@ -837,24 +881,64 @@ void SBC (ADDRESS i) { //Subtract Memory from Accumulator with Borrow
   setN(0);
   setZ(0);
   setV(0);
-  if (getM()) {
-    BYTE m = getByte(i); //FIX
-    BYTE tmp = *AL - m - (getC())? 0:1; //sub if carry is clear 
-    setC(0);
-    if (!tmp) setZ(1);
-    if (tmp & 0x80) setN(1);
-    if (m <= *AL) setC(1); //set if borrow not required 
-    if ((0x80 & *AL) ^ (0x80 & m) && (0x80 & *AL) ^ (0x80 & tmp)) setV(1); //if operands have diff. signs & output and first op differ 
-    *AL = tmp;
-  } else {
-    WORD m = getWordNoWrap(i); //FIX
-    WORD tmp = A - m - (getC())? 0:1; 
-    setC(0);
-    if (!tmp) setZ(1);
-    if (tmp & 0x8000) setN(1);
-    if (m <= A) setC(1);
-    if ((0x8000 & A) ^ (0x80000 & m) && (0x8000 & A) ^ (0x8000 & tmp)) setV(1); //see above 
-    A = tmp;
+  if (getD()) {//BCD
+    BYTE carryHolder = 0;
+    if (getM()) {
+      BYTE m = getByte(i);
+      m = (m & 0x0F) + ((m & 0xF0)*10);
+      BYTE tmp = (*AL & 0x0F) + ((*AL & 0xF0)*10);
+      carryHolder = m <= tmp; //carry not required
+      tmp -= m;
+      tmp -= (getC())? 0:1; //sub if clear
+      setC(0);
+
+      //value is set
+      if (!tmp) setZ(1);
+      if (tmp & 0x80) setN(1);
+      if (carryHolder) setC(1);
+      if (tmp & 0x80) setV(1); // I am going to have it follow N
+      m = tmp % 10; //low 4b
+      tmp = ((tmp/10)%10) << 4;
+      *AL = tmp;
+    } else {
+      WORD m = getWord(i);
+      WORD tmp = (A & 0x000F) + (((A & 0x00F0) >> 4)*10) + (((A & 0x0F00)>>8)*100) + (((A & 0xF000)>>12)*1000);
+      carryHolder = m <= tmp; //carry not required
+      tmp -= (m & 0x000F) + (((m & 0x00F0) >> 4)*10) + (((m & 0x0F00)>>8)*100) + (((m & 0xF000)>>12)*1000); 
+      tmp -= (getC())? 0:1;//sub if clear
+      setC(0);
+      //value is set
+      if (!tmp) setZ(1);
+      if (tmp & 0x8000) setN(1);
+      if (carryHolder) setC(1);
+      if (tmp & 0x8000) setV(1);
+      m = tmp; //copy
+      tmp %= 10; //bottom 4 bits
+      tmp |= ((m/10)%10) << 4;
+      tmp |= ((m/100)%10) << 8;
+      tmp |= ((m/1000)%10) << 12;
+      A = tmp;
+    }
+  } else {//normal binary
+    if (getM()) {
+      BYTE m = getByte(i); 
+      BYTE tmp = *AL - m - (getC())? 0:1; //sub if carry is clear 
+      setC(0);
+      if (!tmp) setZ(1);
+      if (tmp & 0x80) setN(1);
+      if (m <= *AL) setC(1); //set if borrow not required 
+      if ((0x80 & *AL) ^ (0x80 & m) && (0x80 & *AL) ^ (0x80 & tmp)) setV(1); //if operands have diff. signs & output and first op differ 
+      *AL = tmp;
+    } else {
+      WORD m = getWordNoWrap(i); 
+      WORD tmp = A - m - (getC())? 0:1; 
+      setC(0);
+      if (!tmp) setZ(1);
+      if (tmp & 0x8000) setN(1);
+      if (m <= A) setC(1);
+      if ((0x8000 & A) ^ (0x80000 & m) && (0x8000 & A) ^ (0x8000 & tmp)) setV(1); //see above 
+      A = tmp;
+    }
   }
 }
 
@@ -874,13 +958,13 @@ void SEI (void) { //Set Interrupt Disable Status
 //TODO do on optcode level, takes constant 
 //opposite of clear P bits I think?
 void SEP (ADDRESS i) { //Set Processor Status Bits              
-  P |= memory[map[i]]; //FIX
+  P |= memory[map[i]]; 
 }
 
 void STA (ADDRESS i) { //Store Accumulator in Memory
-  setByte(i,*AL); //FIX
+  setByte(i,*AL); 
   if (!getM()) {
-    setbyte(i+1, *AH); //FIX
+    setbyte(i+1, *AH); 
   }
 }
 
@@ -890,21 +974,21 @@ void STP (void) { //Stop the Clock
 }
 
 void STX (ADDRESS i) { //Store Index X in Memory
-  setByte(i,*XL); //FIX
+  setByte(i,*XL); 
   if (!getX()) {
-    setByte(i+1,*XH); //FIX
+    setByte(i+1,*XH); 
   }
 }
 
 void STY (ADDRESS i) { //Store Index Y in Memory
-  setByte(i,*YL); //FIX
+  setByte(i,*YL); 
   if (!getX()) {
     setByte(i=1,*YH);
   }
 }
 
 void STZ (ADDRESS i) { //Store Zero in Memory
-  setByte(i,0); //FIX
+  setByte(i,0); 
   if (!getM()) {
     setByte(i+1,0);
   }
@@ -966,11 +1050,11 @@ void TDC (void) { //Transfer Direct Register to Accumulator
 void TRB (ADDRESS i) { //Test and Reset Bit
   setZ(0);
   if (getM()) {
-    BYTE m = getByte(i); //FIX
-    setByte(i,(~(*AL)) & m); //FIX
+    BYTE m = getByte(i); 
+    setByte(i,(~(*AL)) & m); 
     if (!(m & (*AL))) setZ(1); //slightly different operation, see BIT
   } else {
-    WORD m = getWordNoWrap(i); //FIX
+    WORD m = getWordNoWrap(i); 
     WORD tmp = (~A) & m;
     setWordNoWrap(i,tmp);
     if (!(m & A)) setZ(1); //slightly different operation, see BIT
@@ -981,11 +1065,11 @@ void TRB (ADDRESS i) { //Test and Reset Bit
 void TSB (ADDRESS i) { //Test and Set Bit
   setZ(0);
   if (getM()) {
-    BYTE m = getByte(i); //FIX
-    setByte(i,(*AL) | m); //FIX
+    BYTE m = getByte(i); 
+    setByte(i,(*AL) | m); 
     if (!(m & (*AL))) setZ(1); //slightly different operation, see BIT
   } else {
-    WORD m = getWordNoWrap(i); //FIX
+    WORD m = getWordNoWrap(i); 
     WORD tmp = A | m;
     setWordNoWrap(i,tmp);
     if (!(m & A)) setZ(1); //slightly different operation, see BIT
