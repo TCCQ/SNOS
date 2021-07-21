@@ -53,7 +53,28 @@ void opt08 (void) {
 void opt09 (BYTE i, BYTE j);
 
 //ASL accumulator
-void opt0A (void);
+//copied from instructions.c
+void opt0A (void) {
+
+  setZ(0);
+  setC(0);
+  setN(0);
+
+  if (getM()) {
+    if (*AL & 0x80) setC(1); 
+    *AL = *AL << 1;
+
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    if (o & 0x8000) setC(1);
+
+    A = A << 1;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+    if (A * 0x01) setC(1);
+  }
+}
 
 //PHD stack 
 void opt0B (void) {
@@ -131,7 +152,19 @@ void opt19 (BYTE i, BYTE j) {
 }
 
 //INC accumulator
-void opt1A (void);
+void opt1A (void) {
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    (*AL)++;
+    if (!(*AL)) setZ(1);
+    if ((*AL) & 0x80) setN(1);
+  } else {
+    A++;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //TCS implied 
 void opt1B (void) {
@@ -207,7 +240,27 @@ void opt28 (void) {
 void opt29 (BYTE i);
 
 //ROL accumulator 
-void opt2A (void);
+//copied from instructions.c
+void opt2A (void) {
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    BYTE out = getC();
+    setC(0);
+    *AL = ((*AL << 1) & 0xFF) | out;
+
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+    if (*AL & 0x80) setC(1);
+  } else {
+    WORD out = getC();
+    setC(0);
+    A = ((A << 1) & 0xFFFF) | out;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+    if (A & 0x8000) setC(1);
+  }
+}
 
 //PLD stack 
 void opt2B (void) {
@@ -285,7 +338,19 @@ void opt39 (BYTE i, BYTE j) {
 }
 
 //DEC accumulator
-void opt3A (void);
+void opt3A (void) {
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    (*AL)--;
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A--;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //TSC implied 
 void opt3B (void) {

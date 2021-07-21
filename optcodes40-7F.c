@@ -20,6 +20,7 @@ void opt41 (BYTE i) {
 }
 
 //WDM N/A 
+//TODO
 void opt42 (BYTE i);
 
 //EOR Stack relative
@@ -28,6 +29,7 @@ void opt43 (BYTE i) {
 }
 
 //MVP block move 
+//TODO
 void opt44 (BYTE i, BYTE j);
 
 //EOR direct 
@@ -54,7 +56,24 @@ void opt48 (void) {
 void opt49 (BYTE i, BYTE j);
 
 //LSR accumulator
-void opt4A (void);
+void opt4A (void) {
+  setZ(0);
+  setN(0);
+  setC(0);
+  if (getM()) {
+    if ((*AL) & 0x01) setC(1);
+    *AL >>= 1;
+
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    if (A & 0x01) setC(1);
+    A >>= 1;
+
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //PHK stack 
 void opt4B (void) {
@@ -102,6 +121,7 @@ void opt53 (BYTE i) {
 }
 
 //MVN block move 
+//TODO
 void opt54 (BYTE i, BYTE j);
 
 //EOR direct indexed (X)
@@ -189,7 +209,7 @@ void opt65 (BYTE i) {
   ADC(direct(i));
 }
 
-//ROR direct //TODO fix, takes 1 byte
+//ROR direct //TODO might not match with declaration
 void opt66 (BYTE i) {
   ROR(direct(i));
 }
@@ -208,7 +228,25 @@ void opt68 (void) {
 void opt69 (BYTE i);
 
 //ROR accumulator 
-void opt6A (void);
+void opt6A (void) {
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    BYTE out = getC() << 7;
+    setC(0);
+    *AL = (*AL >> 1) | out;
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+    if (*AL & 0x80) setC(1);
+  } else {
+    WORD out = getC() << 15;
+    setC(0);
+    A = (A >> 1) | out;
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+    if (A & 0x8000) setC(1);
+  }
+}
 
 //RTL stack 
 void opt6B (void) {
