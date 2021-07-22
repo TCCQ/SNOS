@@ -100,7 +100,7 @@ BYTE popByte () {
 }
 
 void pushWord (WORD i) {
-  setWordNoWrap((ADDRESS)S,i);
+  setWordNoWrap((ADDRESS)S - 1,i);
   S -= 2;
 }
 
@@ -434,7 +434,7 @@ void CPY (ADDRESS i) { //Compare Memory and Index Y
   setZ(0);
   setN(0);
   if (getX()) {
-    BYTE m getByte(i)= ; 
+    BYTE m = getByte(i); 
     BYTE tmp = *YL - m;
     if(!tmp) setZ(1);
     if(tmp & 0x80) setN(1);
@@ -901,7 +901,7 @@ void SBC (ADDRESS i) { //Subtract Memory from Accumulator with Borrow
       tmp = ((tmp/10)%10) << 4;
       *AL = tmp;
     } else {
-      WORD m = getWord(i);
+      WORD m = getWordNoWrap(i);
       WORD tmp = (A & 0x000F) + (((A & 0x00F0) >> 4)*10) + (((A & 0x0F00)>>8)*100) + (((A & 0xF000)>>12)*1000);
       carryHolder = m <= tmp; //carry not required
       tmp -= (m & 0x000F) + (((m & 0x00F0) >> 4)*10) + (((m & 0x0F00)>>8)*100) + (((m & 0xF000)>>12)*1000); 

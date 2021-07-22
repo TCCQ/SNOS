@@ -9,7 +9,24 @@
 #include "memory.h"
 
 //CPY immediate
-void optC0 (BYTE i, BYTE j);
+void optC0 (BYTE i, BYTE j) {
+  setC(0);
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    BYTE m = i; 
+    BYTE tmp = *YL - m;
+    if(!tmp) setZ(1);
+    if(tmp & 0x80) setN(1);
+    if(*YL < m) setC(1);
+  } else {
+    WORD m = ((WORD)j << 8) | i;
+    WORD tmp = Y - m;
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (Y < m) setC(1);
+  }
+}
 
 //CMP direct indexed indirect (X)
 void optC1 (BYTE i) {
@@ -17,7 +34,9 @@ void optC1 (BYTE i) {
 }
 
 //REP immediate 
-void optC2 (BYTE i, BYTE j);
+void optC2 (BYTE i) {
+  P &= ~i;
+}
 
 //CMP stack relative 
 void optC3 (BYTE i) {
@@ -50,7 +69,25 @@ void optC8 (void) {
 }
 
 //CMP immediate
-void optC9 (BYTE i, BYTE j);
+void optC9 (BYTE i, BYTE j) {
+  setC(0);
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    BYTE m = i; 
+    BYTE tmp = *AL - m;
+    if (!tmp) setZ(1);
+    if (tmp & 0x80) setN(1);
+    if (*AL < m) setC(1);
+  } else {
+    WORD m = ((WORD)j << 8) | i; 
+    WORD tmp = A - m;
+
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (A < m) setC(1);
+  }
+}
 
 //DEX implied
 void optCA (void) {
@@ -159,7 +196,24 @@ void optDF (BYTE i, BYTE j, BYTE k) {
 }
 
 //CPX immediate
-void optE0 (BYTE i, BYTE j);
+void optE0 (BYTE i, BYTE j){
+  setC(0);
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    BYTE m = i; 
+    BYTE tmp = *YL - m;
+    if(!tmp) setZ(1);
+    if(tmp & 0x80) setN(1);
+    if(*YL < m) setC(1);
+  } else {
+    WORD m = ((WORD)j << 8) | i; 
+    WORD tmp = Y - m;
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+    if (Y < m) setC(1);
+  }
+}
 
 //SBC direct indexed indirect x 
 void optE1 (BYTE i) {
@@ -167,7 +221,9 @@ void optE1 (BYTE i) {
 }
 
 //SEP immediate 
-void optE2 (BYTE i);
+void optE2 (BYTE i) {
+  P |= i;
+}
 
 //SBC stack relative 
 void optE3 (BYTE i) {
@@ -200,7 +256,70 @@ void optE8 (void) {
 }
 
 //SBC immediate 
-void optE9 (BYTE i, BYTE j);
+void optE9 (BYTE i, BYTE j) {
+  setN(0);
+  setZ(0);
+  setV(0);
+  if (getD()) {//BCD
+    BYTE carryHolder = 0;
+    if (getM()) {
+      BYTE m = i;
+      m = (m & 0x0F) + ((m & 0xF0)*10);
+      BYTE tmp = (*AL & 0x0F) + ((*AL & 0xF0)*10);
+      carryHolder = m <= tmp; //carry not required
+      tmp -= m;
+      tmp -= (getC())? 0:1; //sub if clear
+      setC(0);
+
+      //value is set
+      if (!tmp) setZ(1);
+      if (tmp & 0x80) setN(1);
+      if (carryHolder) setC(1);
+      if (tmp & 0x80) setV(1); // I am going to have it follow N
+      m = tmp % 10; //low 4b
+      tmp = ((tmp/10)%10) << 4;
+      *AL = tmp;
+    } else {
+      WORD m = ((WORD)j << 8) | i;
+      WORD tmp = (A & 0x000F) + (((A & 0x00F0) >> 4)*10) + (((A & 0x0F00)>>8)*100) + (((A & 0xF000)>>12)*1000);
+      carryHolder = m <= tmp; //carry not required
+      tmp -= (m & 0x000F) + (((m & 0x00F0) >> 4)*10) + (((m & 0x0F00)>>8)*100) + (((m & 0xF000)>>12)*1000); 
+      tmp -= (getC())? 0:1;//sub if clear
+      setC(0);
+      //value is set
+      if (!tmp) setZ(1);
+      if (tmp & 0x8000) setN(1);
+      if (carryHolder) setC(1);
+      if (tmp & 0x8000) setV(1);
+      m = tmp; //copy
+      tmp %= 10; //bottom 4 bits
+      tmp |= ((m/10)%10) << 4;
+      tmp |= ((m/100)%10) << 8;
+      tmp |= ((m/1000)%10) << 12;
+      A = tmp;
+    }
+  } else {//normal binary
+    if (getM()) {
+      BYTE m = i; 
+      BYTE tmp = *AL - m - (getC())? 0:1; //sub if carry is clear 
+      setC(0);
+      if (!tmp) setZ(1);
+      if (tmp & 0x80) setN(1);
+      if (m <= *AL) setC(1); //set if borrow not required 
+      if ((0x80 & *AL) ^ (0x80 & m) && (0x80 & *AL) ^ (0x80 & tmp)) setV(1); //if operands have diff. signs & output and first op differ 
+      *AL = tmp;
+    } else {
+      WORD m = ((WORD)j << 8) | i; 
+      WORD tmp = A - m - (getC())? 0:1; 
+      setC(0);
+      if (!tmp) setZ(1);
+      if (tmp & 0x8000) setN(1);
+      if (m <= A) setC(1);
+      if ((0x8000 & A) ^ (0x80000 & m) && (0x8000 & A) ^ (0x8000 & tmp)) setV(1); //see above 
+      A = tmp;
+    }
+  }
+}
 
 //NOP implied
 void optEA (void) {
@@ -252,8 +371,13 @@ void optF3 (BYTE i) {
   SBC(stackRelativeIndirectIndexed(i));
 }
 
-//PEA (immediate) stack //TODO this is a constant??
-void optF4 (BYTE i, BYTE j);
+//PEA (immediate) stack 
+//this is just pushing a 16b constant to the stack
+void optF4 (BYTE i, BYTE j) {
+  BYTE tmp = ((WORD)j << 8) | i;
+  setWordNoWrap((ADDRESS)S - 1, tmp);
+  S -= 2;
+}
 
 //SBC direct indexed X
 void optF5 (BYTE i) {

@@ -53,7 +53,19 @@ void opt48 (void) {
 }
 
 //EOR immediate
-void opt49 (BYTE i, BYTE j);
+void opt49 (BYTE i, BYTE j) { 
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL ^= i; 
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A ^= ((WORD)j << 8) | i; 
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //LSR accumulator
 void opt4A (void) {
@@ -225,7 +237,84 @@ void opt68 (void) {
 }
 
 //ADC immediate
-void opt69 (BYTE i);
+//TODO make sure this matches changes from instructions.c version
+void opt69 (BYTE i) {
+  if (getD()) { //BCD addition
+    if (getM()) {
+      BYTE tmp = (*AL & 0x0F) + (((*AL & 0xF0) >> 4)*10);
+      tmp += (i & 0x0F) + (((i & 0xF0) >> 4)*10);
+      tmp += (getC())? 1:0;
+
+      //value is set
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x80) setN(1);
+      if (!tmp) setZ(1);
+      if (tmp > 99) setC(1);
+      if (tmp & 0x80) setV(1); //TODO I guess it follows N?
+      //use m as scratch here
+      i = tmp % 10; //bottom 4 bits
+      tmp = (tmp / 10) %10; //high 4b
+      tmp <<= 4;
+      tmp |= i;
+      *AL = tmp;
+    } else { //16b
+      WORD m = ((WORD)j <<8) | i;
+      WORD tmp = (A & 0x000F) + (((A & 0x00F0) >> 4)*10) + (((A & 0x0F00)>>8)*100) + (((A & 0xF000)>>12)*1000);
+      tmp += (m & 0x000F) + (((m & 0x00F0) >> 4)*10) + (((m & 0x0F00)>>8)*100) + (((m & 0xF000)>>12)*1000); 
+      tmp += (getC())? 1:0;
+
+      //value is set
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x8000) setN(1);
+      if (!tmp) setZ(1);
+      if (tmp > 9999) setC(1);
+      if (tmp & 0x8000) setV(1); 
+      m = tmp; //copy
+      tmp %= 10; //bottom 4 bits
+      tmp |= ((m/10)%10) << 4;
+      tmp |= ((m/100)%10) << 8;
+      tmp |= ((m/1000)%10) << 12;
+      A = tmp;
+    }
+  } else { //normal binary
+    if (getM()) {
+      WORD tmp = *AL + i + (getC())? 1:0; 
+
+      //flags
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x80) setN(1); //high bit is set 
+      if (tmp == 0) setZ(1);
+      if (tmp & 0x0100) setC(1); //rolled over 
+      if (!((A & 0x80) ^ (getByte(i) & 0x80)) && (tmp & 0x80) ^ (A & 0x80)) setV(1); //if sign of operands are the same and tmp is different than that  
+
+      A = tmp & 0xFF;
+
+    } else {
+      WORD m = ((WORD)j << 8) | i; 
+      unsigned long int tmp = A + m + (getC())? 1:0;
+
+      setN(0);
+      setZ(0);
+      setV(0);
+      setC(0);
+      if (tmp & 0x8000) setN(1);
+      if (tmp == 0) setZ(0);
+      if (tmp & 0x010000) setC(1);
+      if (!((A & 0x8000) ^ (m & 0x8000)) && (tmp & 0x8000) ^ (A & 0x8000)) setV(1);
+
+      A = tmp & 0xFFFF;
+    }
+  }
+}
 
 //ROR accumulator 
 void opt6A (void) {

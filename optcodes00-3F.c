@@ -50,7 +50,19 @@ void opt08 (void) {
 }
 
 //ORA immediate 
-void opt09 (BYTE i, BYTE j);
+void opt09 (BYTE i, BYTE j) {
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL |= i; 
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A |= ((WORD)j << 8) | i; 
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //ASL accumulator
 //copied from instructions.c
@@ -237,7 +249,22 @@ void opt28 (void) {
 }
 
 //AND immediate
-void opt29 (BYTE i);
+void opt29 (BYTE i) {
+  setZ(0);
+  setN(0);
+
+  if (getM()) {
+    *AL &= i; 
+
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A &= ((WORD)j << 8) | i; 
+    
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //ROL accumulator 
 //copied from instructions.c

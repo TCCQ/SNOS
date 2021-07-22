@@ -54,7 +54,22 @@ void opt88 (void) {
 }
 
 //BIT immediate 
-void opt89 (BYTE i, BYTE j);
+void opt89 (BYTE i, BYTE j) {
+  setZ(0);
+  setN(0);
+
+  if (getM()) {
+    BYTE tmp = *AL & i; 
+
+    if (!(tmp)) setZ(1);
+    if (tmp & 0x80) setN(1);
+  } else {
+    WORD tmp = A & (((WORD)j << 8) | i); 
+    
+    if (!tmp) setZ(1);
+    if (tmp & 0x8000) setN(1);
+  }
+}
 
 //TXA implied 
 void opt8A (void) {
@@ -167,7 +182,19 @@ void opt9F (BYTE i, BYTE j, BYTE k) {
 }
 
 //LDY immediate
-void optA0 (BYTE i, BYTE j);
+void optA0 (BYTE i, BYTE j){
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *YL = i; 
+    if (!(*YL)) setZ(1);
+    if (*YL & 0x80) setN(1);
+  } else {
+    Y = ((WORD)j << 8) | i; 
+    if (!Y) setZ(1);
+    if (Y & 0x8000) setN(1);
+  }
+}
 
 //LDA direct indexed indirect X
 void optA1 (BYTE i) {
@@ -175,7 +202,19 @@ void optA1 (BYTE i) {
 }
 
 //LDX immediate
-void optA2 (BYTE i, BYTE j);
+void optA2 (BYTE i, BYTE j) {
+  setZ(0);
+  setN(0);
+  if (getX()) {
+    *XL = i; 
+    if (!(*XL)) setZ(1);
+    if (*XL & 0x80) setN(1);
+  } else {
+    X = ((WORD)j << 8) | i; 
+    if (!X) setZ(1);
+    if (X & 0x8000) setN(1);
+  }
+}
 
 //LDA stack relative 
 void optA3 (BYTE i) {
@@ -208,7 +247,19 @@ void optA8 (void) {
 }
 
 //LDA immediate 
-void optA9 (BYTE i, BYTE j);
+void optA9 (BYTE i, BYTE j) {
+  setZ(0);
+  setN(0);
+  if (getM()) {
+    *AL = i; 
+    if (!(*AL)) setZ(1);
+    if (*AL & 0x80) setN(1);
+  } else {
+    A = ((WORD)j << 8) | i; 
+    if (!A) setZ(1);
+    if (A & 0x8000) setN(1);
+  }
+}
 
 //TAX implied 
 void optAA (void) {
