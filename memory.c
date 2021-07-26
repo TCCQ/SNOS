@@ -86,3 +86,98 @@ void setAddressNoWrap(ADDRESS a, ADDRESS d) {
    mbar[mmap[a+1]] = (BYTE)(d >> 8);
    mbar[mmap[a+2]] = (BYTE)(d >> 16);
 }
+
+
+//util funcs 
+BYTE getN(void) {
+ return (P & 0x80) >> 7;
+}
+
+void setN(BYTE i) {
+ P &= ~0x80;
+ P |= (i << 7);
+}
+
+BYTE getV(void) {
+ return (P & 0x40) >> 6; 
+}
+
+void setV (BYTE i) {
+ P &= ~0x40;
+ P |= (i << 6);
+}
+
+BYTE getM(void) {
+ return (P & 0x20) >> 5;
+}
+
+BYTE setM (BYTE i) {
+ P &= ~0x20;
+ P |= (i << 5);
+}
+
+BYTE getX(void) {
+ return (P & 0x10) >> 4;
+}
+
+void setX (BYTE i) {
+ P &= ~0x10;
+ P |= (i << 4);
+}
+
+BYTE getD(void) {
+ return (P & 0x80) >> 3;
+}
+
+void setD (BYTE i) {
+ P &= ~0x08;
+ P |= (i << 3);
+}
+
+BYTE getI(void) {
+ return (P & 0x04) >> 2;
+}
+
+void getI (BYTE i) {
+ P &= ~0x04;
+ P |= (i << 2);
+}
+
+BYTE getZ(void) {
+ return (P & 0x02) >> 1;
+}
+
+void setZ (BYTE i) {
+ P &= ~0x02;
+ P |= (i << 1);
+}
+
+BYTE getC(void) {
+ return P & 0x01;
+}
+
+void setC(void) {
+ P &= ~0x01;
+ P |= (i);
+}
+
+
+//ignoring emulation mode for now 
+void pushByte (BYTE i) {
+ setByteNoWrap((ADDRESS)(S--),i);
+}
+
+BYTE popByte (void) {
+ return getByte((ADDRESS)(++S);
+}
+
+void pushWord (WORD i) {
+ setWordNoWrap((ADDRESS)S - 1,i);
+ S -= 2;
+}
+
+WORD popWord(void) {
+ WORD out = getWordNoWrap((ADDRESS)S);
+ S += 2;
+ return out;
+}

@@ -1,12 +1,12 @@
 /*
- * author; Thomas Ulmer
- *
- * This file contains the means by which the emulator reads and writes to RAM, ROM, and hardware registers
- * all of which are accessed with a 24b address
- * mirroring, and distinctions between RAM, ROM, and registers will be handled *internally*
- * to the read and write functions, compliant with the dev. manuals and other resources I have found
- * (check the documentation directory)
- */
+* author; Thomas Ulmer
+*
+* This file contains the means by which the emulator reads and writes to RAM, ROM, and hardware registers
+* all of which are accessed with a 24b address
+* mirroring, and distinctions between RAM, ROM, and registers will be handled *internally*
+* to the read and write functions, compliant with the dev. manuals and other resources I have found
+* (check the documentation directory)
+*/
 
 #ifndef BYTE 
 typedef unsigned char BYTE;
@@ -37,3 +37,30 @@ ADDRESS getAddressWrap(ADDRESS);
 ADDRESS getAddressNoWrap(ADDRESS);
 void setAddressWrap(ADDRESS, ADDRESS);
 void setAddressNoWrap(ADDRESS, ADDRESS);
+
+
+
+BYTE getN(void);
+void setN(BYTE i);
+BYTE getV(void);
+void setV (BYTE i);
+BYTE getM(void);
+BYTE setM (BYTE i);
+BYTE getX(void);
+void setX (BYTE i);
+BYTE getD(void);
+void setD (BYTE i);
+BYTE getI(void);
+void getI (BYTE i);
+BYTE getZ(void);
+void setZ (BYTE i);
+BYTE getC(void);
+void setC(void);
+
+//stack
+void pushByte (BYTE i);
+BYTE popByte (void);
+void pushWord (WORD i);
+WORD popWord(void);
+
+//see address.c for wrap vs nowrap. Should be using nowrap for everything as far as I can tell

@@ -171,9 +171,9 @@ void opt5B (void) {
   TCD();
 }
 
-//JMP absolute long
+//JMP absolute long (JML)
 void opt5C (BYTE i, BYTE j, BYTE k) {
-  JMP(absoluteLong(i,j,k));
+  JML(absoluteLong(i,j,k));
 }
 
 //EOR absolute indexed X

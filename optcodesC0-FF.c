@@ -177,8 +177,11 @@ void optDA (void) {
 void optDB (void);
 
 //JMP absolute indirect long
-//TODO don't have along version? check instructions.c and jmp vs jml
-void optDC (BYTE i, BYTE j);
+//opt6C but jml and not jmp
+//address.c return w/ PB included
+void optDC (BYTE i, BYTE j) {
+  JML(absoluteIndirect(i,j));
+}
 
 //CMP absolute indexed (X)
 void optDD (BYTE i, BYTE j) {

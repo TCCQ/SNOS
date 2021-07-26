@@ -18,10 +18,9 @@ static inline BYTE getX() {
  *
  * All of the addressing modes that use X/Y registers must check 
  * 8b or 16b current size 
- * This means there is an inherent branch operation. 
+ * This means there is an inherent conditional. 
  * This seems ineffiecient, but I can't see any way around it
  */
-//TODO needs confirmation
 //as far as I can tell, all memory calls in all other files should be NoWrap variants.
 
 ADDRESS absolute (BYTE i, BYTE j) { //a

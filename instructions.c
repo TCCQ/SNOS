@@ -15,125 +15,29 @@
 //useful links
 //https://apprize.best/programming/65816/21.html
 
-//utility functions 
-
-static inline BYTE getN() {
-  return (P & 0x80) >> 7;
-}
-
-static inline void setN(BYTE i) {
-  P &= ~0x80;
-  P |= (i << 7);
-}
-
-static inline BYTE getV() {
-  return (P & 0x40) >> 6; 
-}
-
-static inline void setV (BYTE i) {
-  P &= ~0x40;
-  P |= (i << 6);
-}
-
-static inline BYTE getM() {
-  return (P & 0x20) >> 5;
-}
-
-static inline BYTE setM (BYTE i) {
-  P &= ~0x20;
-  P |= (i << 5);
-}
-
-static inline BYTE getX() {
-  return (P & 0x10) >> 4;
-}
-
-static inline void setX (BYTE i) {
-  P &= ~0x10;
-  P |= (i << 4);
-}
-
-static inline BYTE getD() {
-  return (P & 0x80) >> 3;
-}
-
-static inline void setD (BYTE i) {
-  P &= ~0x08;
-  P |= (i << 3);
-}
-
-static inline BYTE getI() {
-  return (P & 0x04) >> 2;
-}
-
-static inline void getI (BYTE i) {
-  P &= ~0x04;
-  P |= (i << 2);
-}
-
-static inline BYTE getZ() {
-  return (P & 0x02) >> 1;
-}
-
-static inline void setZ (BYTE i) {
-  P &= ~0x02;
-  P |= (i << 1);
-}
-
-static inline BYTE getC() {
-  return P & 0x01;
-}
-
-static inline void setC() {
-  P &= ~0x01;
-  P |= (i);
-}
-
-
-//ignoring emulation mode for now 
-void pushByte (BYTE i) {
-  setByteNoWrap((ADDRESS)(S--),i);
-}
-
-BYTE popByte () {
-  return getByte((ADDRESS)(++S);
-}
-
-void pushWord (WORD i) {
-  setWordNoWrap((ADDRESS)S - 1,i);
-  S -= 2;
-}
-
-WORD popWord() {
-  WORD out = getWordNoWrap((ADDRESS)S);
-  S += 2;
-  return out;
-}
 
 /*
- * NOTE ABOUT IMMEDIATE ADDRESSING
- * some instructions take either an addressed memory location or a constant,
- * I will be handling the constant variations on the optcode level, just do the memory versions here 
- */
+* NOTE ABOUT IMMEDIATE ADDRESSING
+* some instructions take either an addressed memory location or a constant,
+* I will be handling the constant variations on the optcode level, just do the memory versions here 
+*/
 
 /* 
- * NOTE ABOUT ACCUMULATOR ADDRESSING 
- * some instructions take either a mem. location or operate on the A register.
- * this file will contain the memory location implimentations, and the A reg. version will be 
- *  hardcoded in the optcode function 
- */
+* NOTE ABOUT ACCUMULATOR ADDRESSING 
+* some instructions take either a mem. location or operate on the A register.
+* this file will contain the memory location implimentations, and the A reg. version will be 
+*  hardcoded in the optcode function 
+*/
 
 /* NOTE ABOUT THE PROGRAM COUNTER 
- * the program counter points to the NEXT instruction,
- * so barring a jump, PC in incremented BEFORE the current optcode is executed 
- * a jump is just setting the PC/PB accordingly.
- */
-
-//see address.c for wrap vs nowrap. Should be using nowrap for everything as far as I can tell
+* the program counter points to the NEXT instruction,
+* so barring a jump, PC in incremented BEFORE the current optcode is executed 
+* a jump is just setting the PC/PB accordingly.
+*/
 
 //TODO add cycle counts. (maybe do on optcode and not on instruction?)
 
-//TODO fix which jumps set PB and which don't (branches also)
+//I believe I have fixed which jmps set PB, but could always use a double check 
 
 /* NOTE ABOUT FLAGS AND ARITHMATIC
  * ok so a few things 
@@ -557,7 +461,7 @@ void INY (void) { //Increment Index Y by One
   }
 }
 
-//"the only instructions that affect the program bank register are: RTI, RTL, JML, JSL, JMP Absolute Long 
+//the only instructions that affect the program bank register are: RTI, RTL, JML, JSL, JMP Absolute Long 
 void JML (ADDRESS i) { //Jump Long
   PC = i & 0xFFFF;
   PB = (i & 0xFF0000) >> 16;
