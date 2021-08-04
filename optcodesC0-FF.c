@@ -138,7 +138,6 @@ void optD3 (BYTE i) {
 }
 
 //PEI stack (direct indirect)
-//TODO what happens here?
 void optD4 (BYTE i) {
   PEI(directIndirect(i));
 }

@@ -87,6 +87,11 @@ void setAddressNoWrap(ADDRESS a, ADDRESS d) {
    mbar[mmap[a+2]] = (BYTE)(d >> 16);
 }
 
+//get pointer to area in memory, always nowrap
+//for use with frequent read/writes to same place
+void* getPtr(ADDRESS a) {
+  return &(mmap[mbar[a]]);
+}
 
 //util funcs 
 BYTE getN(void) {

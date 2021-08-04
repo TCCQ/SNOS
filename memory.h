@@ -38,7 +38,7 @@ ADDRESS getAddressNoWrap(ADDRESS);
 void setAddressWrap(ADDRESS, ADDRESS);
 void setAddressNoWrap(ADDRESS, ADDRESS);
 
-
+void* getPtr(ADDRESS);
 
 BYTE getN(void);
 void setN(BYTE i);

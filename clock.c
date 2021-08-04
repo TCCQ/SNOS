@@ -29,7 +29,7 @@ typedef unsigned long int ADDRESS; //top byte must be 0x00
  * have a counter, and as necessary use it to keep track of when V-blank happens. 
  *
  * TODO think about how to handle midline interupts (maybe a second sigalarm?)
- * or pass some data through a global variable about what sort of alarm interupt this is, midline, or full-line
+ * or pass some data through a global variable about what sort of alarm interupt this is: midline, or full-line
  * (note that by rendering whole lines at a time, I can avoid calling SDL renderer updates with small changes)
  * note that full emulation of crt-esque graphics is likely impossible for this kind of project, as it would necessitate a screen update every pixel
  * also many modern systems would likely lump those changes into less frequent larger updates anyway (locked 60hz screens and whatnot)
@@ -107,6 +107,9 @@ void performOptcode(void) {
       //8b X/Y, pull 1 fewer val
       shortenLen = 1;
     }
+  } else if (opt == 0x00 || opt == 0x02) {
+    //brk and cop, signature bytes 
+    shortenLen = 1;
   }
   BYTE args[3];
   for (int i = 1; i < optLen - shortenLen; i++) {

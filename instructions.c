@@ -243,7 +243,6 @@ void BRA (ADDRESS i) { //Branch Always
 }
 
 //implied addr 
-//TODO PC inc BY TWO needs to happen *BEFORE* this  
 void BRK (void) { //Force Break         
   pushByte(P);
   pushByte(PB);
@@ -549,23 +548,6 @@ void LSR (ADDRESS i) { //Shift One Bit Right (Memory or Accumulator)
   }
 }
 
-//uses full registers, basically must be in native m=0,x=0 mode. 
-//TODO do this and the following at the optcode level
-void MVN (ADDRESS i[2]) { //Block Move Negative              !!! see xyc, block address
-  while (A-- != 0xFFFF) {
-    memory[map[i[1] | Y++]] = memory[map[i[0] | X++]]; 
-  }
-  //address are bottom of the block area 
-}
-
-//see above 
-void MVP (ADDRESS i[2]) { //Block Move Positive
-  while (A-- != 0xFFFF) {
-    memory[map[i[1] | Y--]] = memory[map[i[0] | X--]]; 
-  }
-  //addresses are the top of the block area 
-}
-
 //probably won't be called, but I will leave this here anyway 
 void NOP (void) { //No Operation                          
   //self explanatory 
@@ -585,15 +567,9 @@ void ORA (ADDRESS i) { //"OR" Memory with Accumulator
   }
 }
 
-//TODO this is dummy, and will not be called. can be cleaned later 
-//push 16b constant 
-//not suited, should be fixed in optcode 
-void PEA (ADDRESS i) { //Push Effective Absolute Address on Stack (or Push Immediate Data on Stack)
-  pushWord(((WORD)memory[map[i+1]]) << 8 | memory[map[i]]); 
-}
-
 //deref'd memory, (this one not an in code constant)
-//TODO check whether this derefs twice or once
+//compose addr from optcode (direct indirect)
+//pull word from location, then push to stack
 void PEI (ADDRESS i) { //Push Effective Indirect Address on Stack (add one cycle if DL f 0)
   pushWord(getWordNoWrap(i)); 
 }
@@ -706,12 +682,6 @@ void PLY (void) { //Pull Index Y form Stack
   }
 }
 
-//TODO takes constant, do at optcode level
-//I'll leave this as a dummy
-void REP (ADDRESS i) { //Reset Status Bits                         
-  P &= ~(memory[map[i]]); //always 1 byte, even when regs. are 16b 
-}
-
 //follow M flag for size, rotated bit is carry. 
 //mem only version
 void ROL (ADDRESS i) { //Rotate One Bit Left (Memory or Accumulator)     
@@ -770,6 +740,7 @@ void RTI (void) { //Return from Interrupt
 
 //This and next have to inc by 1
 //TODO check above 
+//strongly doubt, PC get's inc'd to next instruction before jump pushes return address
 void RTL (void) { //Return from Subroutine Long
   PC = popWord() + 1;
   PB = popByte(); 
@@ -857,12 +828,6 @@ void SED (void) { //Set Decimal Mode
 //set automatically when accepting interupt. 
 void SEI (void) { //Set Interrupt Disable Status
   setI(1);
-}
-
-//TODO do on optcode level, takes constant 
-//opposite of clear P bits I think?
-void SEP (ADDRESS i) { //Set Processor Status Bits              
-  P |= memory[map[i]]; 
 }
 
 void STA (ADDRESS i) { //Store Accumulator in Memory
