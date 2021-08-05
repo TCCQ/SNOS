@@ -242,17 +242,6 @@ void BRA (ADDRESS i) { //Branch Always
   PC = i & 0xFFFF 
 }
 
-//implied addr 
-void BRK (void) { //Force Break         
-  pushByte(P);
-  pushByte(PB);
-  pushWord(PC);
-  setI(1);
-  PB = 0;
-  PC = getWordNoWrap(0xFFE6);  //TODO check vector
-  //vector is $FFE6-$FFE7 in native mode 
-}
-
 //confirm that this does not change PB 
 // leaving this here, but looks good
 void BRL (ADDRESS i) { //Branch Always Long
@@ -306,11 +295,6 @@ void CMP (ADDRESS i) { //Compare Memory and Accumulator
     if (tmp & 0x8000) setN(1);
     if (A < m) setC(1);
   }
-}
-
-//TODO not at all imporant rn 
-void COP (ADDRESS i) { //Coprocessor                                
-  //some vector 
 }
 
 void CPX (ADDRESS i) { //Compare Memory and Index X

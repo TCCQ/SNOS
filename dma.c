@@ -28,30 +28,13 @@ void doDMA(void) {
       if (*count == 0) *count = 65536;
       while (*count != 0) { 
         /*
-         * TODO think about how to truely prevent collisions, this will not fix getting past this point and then having hdma happen
-         * as above, possible solution is to have each byte of dma be itself a signal call,
-         * it seems that posix does not allow nested signal handler interupts, so hdma would wait until after the data trasfer for 1 byte is done
-         * might just be a combination of getpid() and kill(pid, usrInt)
-         * set single byte dma to handler for usrInt
-         * this is not the intended use of signals, and horribly inefficient, as it nessesitates multiple systemcalls for every byte to be transfered
-         * think of something better
-         * 
-         * other thing:
-         * the actual handler function for hblank could not call hdma but instead set some flag for it to be called after
-         * so the handler checks/performs dma/hdma termination, sets the flag for hdma to happen, and then returns
-         * execution on this dma finishes the byte, gets terminated 
-         * have caller check hdma flag and call as nessisary
-         * this would complicate the simplicity of the sigalarm hblank solution, as it would require hdma flag checks whenever hdma could have happened
-         * 
-         * AH!
-         * what about doing it the other way, instead
-         * have a 'running conflicting dma' flag
-         * hblank is triggered, check for hdma/dma collitions, if not, run hdma
-         * it they do, then terminate dma and set running conflicting dma flag
-         * return to dma func, it terminates, IT CHECKS CONFLICT FLAG, if set, run hdma
-         * conflict flag should be channel specific, so that extra hdma ticks don't happen on nonconflicting channels 
-         * this requires the doHdma to be channel specific, but that is an easy change
+         * thinking about how to prevent dma/hdma collitions
          *
+         * simple and smart would be to simply block hblank operations for each tick of dma
+         * then unblock
+         * see: https://www.gnu.org/software/libc/manual/html_node/Remembering-a-Signal.html
+         * this will cause slight variance in timing of scan lines, but it will be extremely slight, so I think it is fine
+         * they come significantly faster than most modern monitors will display anyway, so I am not worried
          */
         if (!(getByte(DMA_ENABLE_REG) & (0x01 << ch))) {
           return; //got terminated by hdma

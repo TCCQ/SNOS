@@ -59,7 +59,7 @@ const BYTE optLengths[0xFF] = {
 //base length is the maximum length (assumes 16b registers), check later and decrease
 //this is because in 8b cases, I need to pass garbage as 2nd argument, which is ignored later
 //this avoids having 2 versions of those instructions with differing argument numbers 
-
+//note that brk and cop (00 and 02) take a signature byte 
 
 //allow single type array using an func. ptr with ambiguous arg count 
 typedef union {
@@ -107,10 +107,7 @@ void performOptcode(void) {
       //8b X/Y, pull 1 fewer val
       shortenLen = 1;
     }
-  } else if (opt == 0x00 || opt == 0x02) {
-    //brk and cop, signature bytes 
-    shortenLen = 1;
-  }
+  } 
   BYTE args[3];
   for (int i = 1; i < optLen - shortenLen; i++) {
     args[i-1] = getByte((ADDRESS)PB << 16 | (PC + i));
@@ -132,16 +129,16 @@ void performOptcode(void) {
   //they will be ignored in the instruction call, as the 8b switch causes the second argument to be ignored
    switch (optLength) {
      case (1):
-       *(optPtrs[opt])(void);
+       *(optPtrs[opt].noArg)(void);
        break;
      case (2):
-       *(optPtrs[opt])(args[0]);
+       *(optPtrs[opt].oneArg)(args[0]);
        break;
      case (3):
-       *(optPtrs[opt])(args[0], args[1]);
+       *(optPtrs[opt].twoArg)(args[0], args[1]);
        break;
      case (4):
-       *(optPtrs[opt])(args[0], args[1], args[2]);
+       *(optPtrs[opt]threeArg)(args[0], args[1], args[2]);
        break;
    }
 }
